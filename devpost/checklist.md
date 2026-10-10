@@ -39,7 +39,7 @@ Build mode: fast
   Learner check: Open the translator, sign in front of the camera, and confirm that the status badge shows "Recognizing" and commits the confirmed sign once without duplicates.
   Commit: `Connect live MediaPipe streaming to FastAPI WebSocket recognition`
 
-- [ ] **4. Utterance Formation, Persistent Transcript, and Speech Synthesis**
+- [x] **4. Utterance Formation, Persistent Transcript, and Speech Synthesis**
   Becomes usable: Confirmed words accumulate into an utterance; pausing (~1.2s) or clicking *"Finish & Speak"* voices the translated message aloud via the browser Web Speech API and appends it to the persistent conversation transcript with replay controls.
   Why now: Completes the end-to-end communication loop (sign → text → speech) that hearing conversation partners rely on.
   PRD ref: `prd.md > The Core Journey` (steps 6–7), `prd.md > Utterance Accumulation & Speech Synthesis`, `prd.md > Conversation Transcript & History`
