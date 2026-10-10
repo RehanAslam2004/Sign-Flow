@@ -19,7 +19,7 @@ Build mode: fast
   Learner check: Open http://localhost:3000, select "I'm the one signing", allow camera access, and confirm the camera stream and hand framing guide appear.
   Commit: `Initialize SignFlow with mode selection and live camera viewport`
 
-- [ ] **2. Python Inference Service and Canonical Normalization Engine**
+- [x] **2. Python Inference Service and Canonical Normalization Engine**
   Becomes usable: The Python FastAPI service in `cv-service/` runs at `http://localhost:8000`. It exposes the WebSocket endpoint at `/ws/predict`, executes canonical wrist-centering and palm-scale normalization, loads the PSL classifier, and returns valid structured `v1.0` prediction JSON packets.
   Why now: Proves the backend ML and math kernel early, establishing the verified contract that the frontend will stream into.
   PRD ref: `prd.md > Recognition State Machine & Gesture Boundaries`
