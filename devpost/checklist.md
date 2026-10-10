@@ -49,7 +49,7 @@ Build mode: fast
   Learner check: Sign a word, pause, and verify the browser speaks the word aloud and adds it to the readable transcript with a working audio replay button.
   Commit: `Add utterance accumulation, speech synthesis, and conversation transcript`
 
-- [ ] **5. Session Controls, Camera Switching, and Dignified Recovery States**
+- [x] **5. Session Controls, Camera Switching, and Dignified Recovery States**
   Becomes usable: A complete, resilient product with toolbar controls (Switch camera, End conversation, Clear transcript, Change mode) and dignified handling for camera permission denied, disconnected video, and backend offline.
   Why now: Hardens the prototype into a calm, reliable demo that handles unexpected camera or service events gracefully.
   PRD ref: `prd.md > Session Management & Recovery`, `prd.md > States and Boundaries`
