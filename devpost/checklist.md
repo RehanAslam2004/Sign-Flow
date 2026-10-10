@@ -29,7 +29,7 @@ Build mode: fast
   Learner check: Verify the FastAPI service starts at http://localhost:8000/docs and passes the automated normalization test suite.
   Commit: `Add FastAPI WebSocket service and canonical feature normalizer`
 
-- [ ] **3. Live MediaPipe Landmark Streaming and Real-Time PSL Sign Recognition**
+- [x] **3. Live MediaPipe Landmark Streaming and Real-Time PSL Sign Recognition**
   Becomes usable: Moving your hands in front of the camera tracks 21 hand landmarks via MediaPipe JS, streams coordinate vectors to FastAPI via WebSocket, and displays a live candidate preview and confirmed PSL sign on screen.
   Why now: This connects the frontend camera to the Python inference engine over WebSocket, delivering the unique AI recognition kernel.
   PRD ref: `prd.md > The Core Journey` (steps 3–5), `prd.md > Recognition State Machine & Gesture Boundaries`

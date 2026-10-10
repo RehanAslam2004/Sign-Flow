@@ -15,9 +15,17 @@ def main():
     print("Directory:", service_dir)
     print("--------------------------------------------------")
 
+    # Determine Python executable (prefer .venv if available)
+    venv_python = (
+        os.path.join(service_dir, ".venv", "Scripts", "python.exe")
+        if os.name == "nt"
+        else os.path.join(service_dir, ".venv", "bin", "python")
+    )
+    python_bin = venv_python if os.path.exists(venv_python) else sys.executable
+
     # Run uvicorn on port 8000
     cmd = [
-        sys.executable,
+        python_bin,
         "-m",
         "uvicorn",
         "main:app",
