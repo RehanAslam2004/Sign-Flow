@@ -1,0 +1,22 @@
+# Personal learning context
+/devpost/learner-profile.md
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+
+# Python
+cv-service/.venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+

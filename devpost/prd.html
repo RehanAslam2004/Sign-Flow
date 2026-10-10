@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SignFlow — Product Requirements (PRD)</title>
+  <style>
+    :root {
+      --primary: #068D9D;
+      --primary-hover: #05707d;
+      --secondary: #53599A;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text-main: #1E293B;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+      --accent-subtle: #E6F4F6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 32px 16px;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    header {
+      background: var(--card-bg);
+      padding: 32px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.825rem;
+      font-weight: 600;
+      background: var(--accent-subtle);
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+    h1 { font-size: 2rem; color: var(--text-main); margin-bottom: 8px; }
+    p.lead { font-size: 1.1rem; color: var(--text-muted); }
+
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .tab-btn.active, .tab-btn:hover {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .card {
+      background: var(--card-bg);
+      padding: 24px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    h2 { font-size: 1.4rem; color: var(--text-main); margin-bottom: 16px; border-bottom: 2px solid var(--accent-subtle); padding-bottom: 8px; }
+    h3 { font-size: 1.15rem; color: var(--secondary); margin: 16px 0 8px; }
+
+    ol, ul { padding-left: 20px; margin-bottom: 12px; }
+    li { margin-bottom: 6px; }
+
+    .journey-step {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 16px;
+      align-items: flex-start;
+    }
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+    .step-text strong { color: var(--text-main); display: block; font-size: 1.05rem; }
+    .step-text p { color: var(--text-muted); font-size: 0.95rem; }
+
+    .state-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .state-card {
+      background: #FAFAFB;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--secondary);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .state-card.primary { border-left-color: var(--primary); }
+    .state-card h4 { font-size: 1rem; margin-bottom: 6px; color: var(--text-main); }
+    .state-card p { font-size: 0.9rem; color: var(--text-muted); }
+
+    .diagram-box {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      overflow-x: auto;
+      margin-bottom: 20px;
+    }
+    svg.journey-svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge" style="background: #E6F4EA; color: #137333;">PRD • Status: Approved</span>
+      <h1>SignFlow Product Requirements</h1>
+      <p class="lead">Translate signs. Bridge conversations. A dignified, browser-based Pakistan Sign Language communication tool.</p>
+    </header>
+
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="showTab('journey')">Core Journey</button>
+      <button class="tab-btn" onclick="showTab('screens')">Screens & Layout</button>
+      <button class="tab-btn" onclick="showTab('engine')">Recognition Engine</button>
+      <button class="tab-btn" onclick="showTab('states')">States & Recovery</button>
+      <button class="tab-btn" onclick="showTab('boundaries')">Scope Boundary</button>
+    </div>
+
+    <!-- Core Journey Tab -->
+    <div id="journey" class="tab-content active">
+      <div class="card">
+        <h2>Interactive Journey Walkthrough</h2>
+        <div class="diagram-box">
+          <svg class="journey-svg" viewBox="0 0 800 130" xmlns="http://www.w3.org/2000/svg">
+            <!-- Node 1 -->
+            <rect x="10" y="35" width="130" height="60" rx="8" fill="#E6F4F6" stroke="#068D9D" stroke-width="2"/>
+            <text x="75" y="60" font-size="12" font-weight="bold" fill="#068D9D" text-anchor="middle">1. Arrival</text>
+            <text x="75" y="76" font-size="10" fill="#64748B" text-anchor="middle">Dual-mode card</text>
+
+            <path d="M 140 65 L 170 65" stroke="#CBD5E1" stroke-width="2" marker-end="url(#arrow)"/>
+
+            <!-- Node 2 -->
+            <rect x="170" y="35" width="130" height="60" rx="8" fill="#FFFFFF" stroke="#068D9D" stroke-width="2"/>
+            <text x="235" y="60" font-size="12" font-weight="bold" fill="#068D9D" text-anchor="middle">2. Camera Start</text>
+            <text x="235" y="76" font-size="10" fill="#64748B" text-anchor="middle">Permission & Guide</text>
+
+            <path d="M 300 65 L 330 65" stroke="#CBD5E1" stroke-width="2"/>
+
+            <!-- Node 3 -->
+            <rect x="330" y="35" width="130" height="60" rx="8" fill="#FFFFFF" stroke="#53599A" stroke-width="2"/>
+            <text x="395" y="60" font-size="12" font-weight="bold" fill="#53599A" text-anchor="middle">3. Live Signing</text>
+            <text x="395" y="76" font-size="10" fill="#64748B" text-anchor="middle">Stability (500ms)</text>
+
+            <path d="M 460 65 L 490 65" stroke="#CBD5E1" stroke-width="2"/>
+
+            <!-- Node 4 -->
+            <rect x="490" y="35" width="130" height="60" rx="8" fill="#FFFFFF" stroke="#53599A" stroke-width="2"/>
+            <text x="555" y="60" font-size="12" font-weight="bold" fill="#53599A" text-anchor="middle">4. Word Commit</text>
+            <text x="555" y="76" font-size="10" fill="#64748B" text-anchor="middle">Boundary / Rest reset</text>
+
+            <path d="M 620 65 L 650 65" stroke="#CBD5E1" stroke-width="2"/>
+
+            <!-- Node 5 -->
+            <rect x="650" y="35" width="140" height="60" rx="8" fill="#E6F4F6" stroke="#068D9D" stroke-width="2"/>
+            <text x="720" y="60" font-size="12" font-weight="bold" fill="#068D9D" text-anchor="middle">5. Speech & Log</text>
+            <text x="720" y="76" font-size="10" fill="#64748B" text-anchor="middle">Utterance spoken</text>
+          </svg>
+        </div>
+
+        <div class="journey-step">
+          <div class="step-num">1</div>
+          <div class="step-text">
+            <strong>Arrival & Purpose Selection</strong>
+            <p>Clean landing screen with headline "Let's make conversation flow" and two scenario cards: "I'm the one signing" and "Someone with me is signing".</p>
+          </div>
+        </div>
+
+        <div class="journey-step">
+          <div class="step-num">2</div>
+          <div class="step-text">
+            <strong>Permission & Camera Setup</strong>
+            <p>Camera permission requested strictly on action. Mobile defaults to front or rear sensor according to selected scenario.</p>
+          </div>
+        </div>
+
+        <div class="journey-step">
+          <div class="step-num">3</div>
+          <div class="step-text">
+            <strong>Signing & Debounced Recognition</strong>
+            <p>Live candidate preview indicates tracked sign. Stability window (500–800ms) confirms candidate without rapid flickering.</p>
+          </div>
+        </div>
+
+        <div class="journey-step">
+          <div class="step-num">4</div>
+          <div class="step-text">
+            <strong>Gesture Boundary & Transcript Commit</strong>
+            <p>Confirmed sign added to transcript once upon gesture boundary or movement to resting position. Holding pose never creates duplicates.</p>
+          </div>
+        </div>
+
+        <div class="journey-step">
+          <div class="step-num">5</div>
+          <div class="step-text">
+            <strong>Utterance Formation & Natural Speech</strong>
+            <p>Words accumulate into an utterance. Upon a natural pause (~1.5s) or clicking "Finish & Speak", speech synthesis voices the message aloud.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Screens & Layout Tab -->
+    <div id="screens" class="tab-content">
+      <div class="card">
+        <h2>Surface 1: Arrival & Mode Selection</h2>
+        <p style="margin-bottom: 12px; color: var(--text-muted);">Minimalist entry ensuring zero onboarding fatigue and zero identity disclosure.</p>
+        <div style="border: 2px dashed var(--border); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
+          <h3 style="margin-top:0;">Mode Cards</h3>
+          <ul>
+            <li><strong>Card 1: "I'm the one signing"</strong> — Defaults to front camera (mirror view); signer can see their framing.</li>
+            <li><strong>Card 2: "Someone with me is signing"</strong> — Defaults to rear camera on mobile; easily pointed at conversational partner.</li>
+          </ul>
+        </div>
+
+        <h2>Surface 2: Responsive Translator</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+          <div style="background: #FAFAFB; border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
+            <h3>Desktop (2-Column)</h3>
+            <p><strong>Left:</strong> Live webcam feed with subtle hand guide + state indicator badge ("Recognizing", "Sign confirmed").</p>
+            <p><strong>Right:</strong> Prominent active translation, Auto-speak toggle, manual Speak/Replay buttons, and running transcript.</p>
+          </div>
+          <div style="background: #FAFAFB; border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
+            <h3>Mobile (Vertical Stack)</h3>
+            <p>1. Camera view at top with guide overlays.</p>
+            <p>2. Active recognized word/phrase & speech trigger.</p>
+            <p>3. Clean conversation history below.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recognition Engine Tab -->
+    <div id="engine" class="tab-content">
+      <div class="card">
+        <h2>Recognition State Machine & Deduplication</h2>
+        <ul>
+          <li><strong>Interim Preview:</strong> Displays tentative recognized sign without polluting the transcript.</li>
+          <li><strong>Stability Window (500–800ms):</strong> Requires model predictions to stay stable before entering candidate status.</li>
+          <li><strong>Boundary & Rest Reset:</strong> Recognizer commits exactly once, then disarms until hands move to rest or transition to a distinct subsequent gesture.</li>
+          <li><strong>Utterance Pauses:</strong> Accumulates isolated words into a phrase; speaks on pause (~1–1.5s) or via manual "Finish & Speak" action.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- States & Recovery Tab -->
+    <div id="states" class="tab-content">
+      <div class="card">
+        <h2>Dignified Recovery & Error States</h2>
+        <div class="state-grid">
+          <div class="state-card primary">
+            <h4>Camera Access Needed</h4>
+            <p>Displays clear empty state with "Try again" button and browser settings guidance. No raw technical errors.</p>
+          </div>
+          <div class="state-card">
+            <h4>Camera Disconnected</h4>
+            <p>"Your camera stopped working." Offers reconnect/switch options; transcript is preserved.</p>
+          </div>
+          <div class="state-card">
+            <h4>No Hands in Frame</h4>
+            <p>Subtle overlay: "Position your hands in the camera frame." Never clears transcript or raises disruptive alarms.</p>
+          </div>
+          <div class="state-card">
+            <h4>Unclear / Unsupported Sign</h4>
+            <p>"Sign not recognized — try signing again." Never hallucinates words or makes guesses via an LLM.</p>
+          </div>
+          <div class="state-card primary">
+            <h4>Long Inactivity</h4>
+            <p>"Ready when you are." Calm idle state that keeps history visible and ready to resume immediately.</p>
+          </div>
+          <div class="state-card">
+            <h4>Speech Failure</h4>
+            <p>Audio error notice; translated text remains prominently displayed on screen.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scope Boundary Tab -->
+    <div id="boundaries" class="tab-content">
+      <div class="card">
+        <h2>Proof of Concept Boundary</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px;">
+          <div>
+            <h3 style="color: var(--primary);">What We're Building (Now)</h3>
+            <ul>
+              <li>Dual-mode landing surface</li>
+              <li>Just-in-time camera initialization</li>
+              <li>Responsive 2-column & mobile stacked layout</li>
+              <li>8–12 verified PSL sign vocabulary</li>
+              <li>Debounced recognition state machine</li>
+              <li>Pause-triggered utterance builder</li>
+              <li>Web Speech synthesis + replay controls</li>
+              <li>In-session running transcript</li>
+              <li>Camera switch, end, & clear session toolbar</li>
+            </ul>
+          </div>
+          <div>
+            <h3 style="color: #64748B;">Deferred / Stretch Goals</h3>
+            <ul>
+              <li>Suggested visual sign replies (stretch feature)</li>
+              <li>In-line editing of past transcript entries</li>
+              <li>Reverse speech-to-text</li>
+              <li>User accounts & persistent database</li>
+              <li>Arbitrary continuous PSL grammar parsing</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      SignFlow • Devpost Build With AI: Basics • Generated via 3-prd
+    </footer>
+  </div>
+
+  <script>
+    function showTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      event.target.classList.add('active');
+    }
+  </script>
+</body>
+</html>

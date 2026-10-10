@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SignFlow — Technical Specification (Spec)</title>
+  <style>
+    :root {
+      --primary: #068D9D;
+      --primary-hover: #05707d;
+      --secondary: #53599A;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text-main: #1E293B;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+      --accent-subtle: #E6F4F6;
+      --code-bg: #0F172A;
+      --code-text: #E2E8F0;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 32px 16px;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    header {
+      background: var(--card-bg);
+      padding: 32px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.825rem;
+      font-weight: 600;
+      background: var(--accent-subtle);
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+    h1 { font-size: 2rem; color: var(--text-main); margin-bottom: 8px; }
+    p.lead { font-size: 1.1rem; color: var(--text-muted); }
+
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 10px 18px;
+      border-radius: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .tab-btn.active, .tab-btn:hover {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .card {
+      background: var(--card-bg);
+      padding: 24px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    }
+    h2 { font-size: 1.4rem; color: var(--text-main); margin-bottom: 16px; border-bottom: 2px solid var(--accent-subtle); padding-bottom: 8px; }
+    h3 { font-size: 1.15rem; color: var(--secondary); margin: 16px 0 8px; }
+
+    ol, ul { padding-left: 20px; margin-bottom: 12px; }
+    li { margin-bottom: 6px; }
+
+    pre {
+      background: var(--code-bg);
+      color: var(--code-text);
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 0.875rem;
+      margin: 12px 0;
+    }
+
+    .diagram-box {
+      background: #FFFFFF;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      overflow-x: auto;
+      margin-bottom: 20px;
+    }
+    svg.arch-svg {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .component-card {
+      background: #FAFAFB;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--primary);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .component-card h4 { font-size: 1rem; color: var(--text-main); margin-bottom: 4px; }
+    .component-card p { font-size: 0.875rem; color: var(--text-muted); }
+    .component-card .tag { font-size: 0.75rem; background: var(--accent-subtle); color: var(--primary); padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge" style="background: #E6F4EA; color: #137333;">SPEC • Status: Approved</span>
+      <h1>SignFlow Technical Specification</h1>
+      <p class="lead">Hybrid Client-Server Architecture • In-Browser MediaPipe + Python FastAPI WebSocket Inference</p>
+    </header>
+
+    <div class="nav-tabs">
+      <button class="tab-btn active" onclick="showTab('arch')">Architecture & Dataflow</button>
+      <button class="tab-btn" onclick="showTab('contract')">WebSocket Contract</button>
+      <button class="tab-btn" onclick="showTab('components')">Components & Files</button>
+      <button class="tab-btn" onclick="showTab('running')">Running & Setup</button>
+    </div>
+
+    <!-- Architecture Tab -->
+    <div id="arch" class="tab-content active">
+      <div class="card">
+        <h2>System Architecture Diagram</h2>
+        <div class="diagram-box">
+          <svg class="arch-svg" viewBox="0 0 850 180" xmlns="http://www.w3.org/2000/svg">
+            <!-- Client Box -->
+            <rect x="10" y="20" width="380" height="140" rx="12" fill="#F8FAFC" stroke="#068D9D" stroke-width="2"/>
+            <text x="200" y="45" font-size="14" font-weight="bold" fill="#068D9D" text-anchor="middle">Browser (Next.js 14 + React)</text>
+
+            <rect x="25" y="65" width="160" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1"/>
+            <text x="105" y="90" font-size="11" font-weight="600" fill="#1E293B" text-anchor="middle">Camera & Video</text>
+
+            <path d="M 185 85 L 215 85" stroke="#068D9D" stroke-width="2"/>
+
+            <rect x="215" y="65" width="160" height="40" rx="6" fill="#E6F4F6" stroke="#068D9D"/>
+            <text x="295" y="90" font-size="11" font-weight="600" fill="#068D9D" text-anchor="middle">MediaPipe JS (Landmarks)</text>
+
+            <rect x="70" y="115" width="260" height="32" rx="6" fill="#FFFFFF" stroke="#CBD5E1"/>
+            <text x="200" y="135" font-size="11" fill="#64748B" text-anchor="middle">State Machine & SpeechSynthesis</text>
+
+            <!-- WebSocket Arrows -->
+            <path d="M 390 85 L 460 85" stroke="#068D9D" stroke-width="2.5"/>
+            <text x="425" y="75" font-size="10" font-weight="bold" fill="#068D9D" text-anchor="middle">Raw (x,y,z)</text>
+
+            <path d="M 460 115 L 390 115" stroke="#53599A" stroke-width="2.5"/>
+            <text x="425" y="135" font-size="10" font-weight="bold" fill="#53599A" text-anchor="middle">Predictions</text>
+
+            <!-- Server Box -->
+            <rect x="460" y="20" width="380" height="140" rx="12" fill="#F8FAFC" stroke="#53599A" stroke-width="2"/>
+            <text x="650" y="45" font-size="14" font-weight="bold" fill="#53599A" text-anchor="middle">Backend (FastAPI Python Service)</text>
+
+            <rect x="475" y="65" width="170" height="40" rx="6" fill="#FFFFFF" stroke="#CBD5E1"/>
+            <text x="560" y="90" font-size="11" font-weight="600" fill="#1E293B" text-anchor="middle">Feature Normalizer</text>
+
+            <path d="M 645 85 L 675 85" stroke="#53599A" stroke-width="2"/>
+
+            <rect x="675" y="65" width="150" height="40" rx="6" fill="#FFFFFF" stroke="#53599A"/>
+            <text x="750" y="90" font-size="11" font-weight="600" fill="#53599A" text-anchor="middle">scikit-learn Classifier</text>
+
+            <text x="650" y="135" font-size="11" fill="#64748B" text-anchor="middle">Single source of truth for preprocessing</text>
+          </svg>
+        </div>
+        <p><strong>Key Separation:</strong> Video frames stay 100% inside the browser. MediaPipe JS extracts 21 points, and numeric coordinates are streamed via WebSocket to the Python service, which owns canonical feature normalization and model inference.</p>
+      </div>
+    </div>
+
+    <!-- Contract Tab -->
+    <div id="contract" class="tab-content">
+      <div class="card">
+        <h2>Versioned WebSocket Schema (v1.0)</h2>
+        <h3>Client → Server Frame Message</h3>
+        <pre>{
+  "schema_version": "1.0",
+  "session_id": "sess_9f8a3c21",
+  "frame_id": 1042,
+  "timestamp": 1712345678912,
+  "image_width": 1280,
+  "image_height": 720,
+  "hands_detected": 1,
+  "hands": [
+    {
+      "handedness": "Right",
+      "score": 0.96,
+      "landmarks": [
+        { "x": 0.542, "y": 0.421, "z": -0.045 } // 21 landmark objects
+      ]
+    }
+  ]
+}</pre>
+        <h3>Server → Client Prediction Response</h3>
+        <pre>{
+  "schema_version": "1.0",
+  "session_id": "sess_9f8a3c21",
+  "frame_id": 1042,
+  "timestamp": 1712345678950,
+  "status": "recognized", // "recognized" | "candidate" | "uncertain" | "no_hands"
+  "sign": "HELLO",
+  "confidence": 0.91,
+  "is_candidate": true,
+  "message": null
+}</pre>
+      </div>
+    </div>
+
+    <!-- Components Tab -->
+    <div id="components" class="tab-content">
+      <div class="card">
+        <h2>Component Architecture & Responsibilities</h2>
+        <div class="component-card">
+          <span class="tag">Next.js / React</span>
+          <h4>CameraViewport.tsx</h4>
+          <p>Initializes webcam with requested facingMode (front/rear), renders framing guide, and binds video to MediaPipe extractor.</p>
+        </div>
+        <div class="component-card">
+          <span class="tag">TypeScript / WebAssembly</span>
+          <h4>lib/mediapipe.ts</h4>
+          <p>Loads HandLandmarker model asset, tracks hands at ~30 FPS, and sends raw landmarks without client-side normalization.</p>
+        </div>
+        <div class="component-card">
+          <span class="tag">Python / FastAPI</span>
+          <h4>cv-service/preprocessing.py</h4>
+          <p>Single source of truth for wrist-centering and palm-scale normalization. Shared between training pipeline and live server.</p>
+        </div>
+        <div class="component-card">
+          <span class="tag">TypeScript Logic</span>
+          <h4>lib/stateMachine.ts</h4>
+          <p>500–800ms stability window + gesture boundary detection. Eliminates duplicate repeats and triggers speech synthesis.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Running Tab -->
+    <div id="running" class="tab-content">
+      <div class="card">
+        <h2>Single Development Command</h2>
+        <p>A single cross-platform command launches both services with live reload:</p>
+        <pre>npm run dev</pre>
+        <div class="grid-2" style="margin-top: 16px;">
+          <div style="background: #FAFAFB; border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
+            <h4 style="color: var(--primary);">Frontend</h4>
+            <p><strong>URL:</strong> http://localhost:3000</p>
+            <p>Next.js App Router with hot module replacement.</p>
+          </div>
+          <div style="background: #FAFAFB; border: 1px solid var(--border); padding: 16px; border-radius: 8px;">
+            <h4 style="color: var(--secondary);">AI Inference API</h4>
+            <p><strong>URL:</strong> http://localhost:8000</p>
+            <p>FastAPI WebSocket server with uvicorn reload.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      SignFlow • Devpost Build With AI: Basics • Generated via 4-spec
+    </footer>
+  </div>
+
+  <script>
+    function showTab(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      event.target.classList.add('active');
+    }
+  </script>
+</body>
+</html>
