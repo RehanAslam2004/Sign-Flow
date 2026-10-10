@@ -9,7 +9,7 @@ Build mode: fast
 
 ## Slices
 
-- [ ] **1. Scaffolding, Arrival Landing Surface, and Camera Stream**
+- [x] **1. Scaffolding, Arrival Landing Surface, and Camera Stream**
   Becomes usable: The Next.js web application launches at `http://localhost:3000`. You see the branded SignFlow arrival screen with two mode cards (*"I'm the one signing"* vs. *"Someone with me is signing"*). Clicking a mode initializes the live camera feed with hand-framing guides and facing-mode defaults.
   Why now: Establishes the project scaffolding, branding, responsive layout, and camera permission UX that all subsequent recognition layers render into.
   PRD ref: `prd.md > Mode Selection & Camera Setup`, `prd.md > Look and Feel`
