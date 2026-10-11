@@ -61,8 +61,8 @@ Build mode: fast
 
 ## Hands-on Checkpoints
 
-- [ ] Early usable behavior explored — after Slice 3 (live camera + MediaPipe + WebSocket PSL recognition verified)
-- [ ] Final kick-the-tires exploration and feedback completed — after Slice 5 (complete end-to-end loop)
+- [x] Early usable behavior explored — after Slice 3 (live camera + MediaPipe + WebSocket PSL recognition verified)
+- [x] Final kick-the-tires exploration and feedback completed — after Slice 5 (complete end-to-end loop)
 
 ## Final Review
 
