@@ -8,7 +8,8 @@
     "dev": "concurrently -n \"next,cv\" -c \"cyan,magenta\" \"npm run dev:next\" \"npm run dev:cv\"",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "npx tsx tests/test_suggested_replies.ts"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.14",

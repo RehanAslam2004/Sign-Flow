@@ -59,6 +59,16 @@ Build mode: fast
   Learner check: Test switching cameras, ending the session, and verify the backend offline indicator when FastAPI is stopped.
   Commit: `Add session controls, camera switching, and error recovery states`
 
+- [x] **6. Contextual Suggested Sign Replies and Verified Reference Viewer**
+  Becomes usable: In "Someone with me is signing" mode, confirmed incoming messages in the transcript reveal a "Suggested replies" section with 2–4 contextually ranked responses. Choosing a reply opens a mobile-friendly detail view with complete text, explanation of meaning, and verified PSL sign instructions/visual references (or an explicit "Verified sign demonstration not available yet" notice when pending). The feature is strictly disabled in "I'm the one signing" mode.
+  Why now: Completes the full two-way communication loop by empowering the hearing conversation partner to respond in Pakistan Sign Language using verified sign references.
+  PRD ref: `prd.md > Suggested Sign Replies (Partner Mode Exclusively)`, `prd.md > What We're Building`
+  Spec ref: `spec.md > Frontend State Schema`, `spec.md > File Structure`, `spec.md > External Services and Dependencies`
+  Build: Create `lib/replyCatalogue.ts` (data model and curated PSL catalogue), implement `app/api/suggest-replies/route.ts` with mode validation, build `components/SuggestedReplies.tsx` and `components/SignReferenceModal.tsx`, integrate into `app/page.tsx` with deduplication and mode gating, and write unit tests for the catalogue and endpoint.
+  Verify (mechanical): Run automated tests verifying mode rejection, contextual reply ranking, deduplication, and `next build` passing without errors.
+  Learner check: Switch to "Someone with me is signing", commit an utterance (e.g. "WATER" or "HELP"), confirm 2–4 suggested replies appear, select one to view its sign details, and verify that switching to "I'm the one signing" completely suppresses the feature.
+  Commit: `Implement contextual suggested sign replies and verified reference viewer`
+
 ## Hands-on Checkpoints
 
 - [x] Early usable behavior explored — after Slice 3 (live camera + MediaPipe + WebSocket PSL recognition verified)
@@ -82,3 +92,4 @@ Activity mode: [to be recorded upon completion]
 
 ## Revisions
 
+- **Scope Extension (Suggested Sign Replies):** Added Slice 6 to implement contextual suggested responses for hearing conversation partners in "Someone with me is signing" mode. Strictly restricted from "I'm the one signing" mode. Leverages a verified PSL catalogue with truthful pending-verification disclaimers where visual media is not yet available, ensuring zero hallucinated hand shapes.

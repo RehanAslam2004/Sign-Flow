@@ -242,6 +242,42 @@ interface RecognitionState {
   autoSpeechEnabled: boolean;
   transcript: ConversationMessage[];
 }
+
+export interface SignReferenceEntry {
+  id: string;
+  phrase: string;
+  pslLabel: string;
+  intent: 'offer_help' | 'confirm' | 'acknowledge' | 'clarify';
+  triggerKeywords: string[];
+  mediaUrl?: string;
+  validationStatus: 'verified' | 'pending_verification';
+  source: string;
+  usageNotes?: string;
+  stepByStep?: string[];
+}
+
+export interface SuggestedReply {
+  id: string;
+  text: string;
+  intent: string;
+  referenceId?: string;
+  validationStatus: 'verified' | 'pending_verification';
+  reference?: SignReferenceEntry;
+}
+
+export interface SuggestRepliesRequest {
+  mode: 'partner' | 'signing';
+  messageId: string;
+  text: string;
+  context?: string[];
+}
+
+export interface SuggestRepliesResponse {
+  messageId: string;
+  suggestions: SuggestedReply[];
+  isFallback: boolean;
+  notice?: string;
+}
 ```
 
 ## File Structure
@@ -249,6 +285,9 @@ interface RecognitionState {
 ```text
 Sign flow/
 ├── app/
+│   ├── api/
+│   │   └── suggest-replies/
+│   │       └── route.ts        # Contextual reply suggestion endpoint with mode validation
 │   ├── layout.tsx              # Root HTML shell & metadata
 │   ├── page.tsx                # Main page (switches Landing / Translator)
 │   └── globals.css             # Tailwind utilities & CSS custom properties
@@ -258,6 +297,8 @@ Sign flow/
 │   ├── CameraViewport.tsx      # Video stream, hand overlay, device switcher
 │   ├── RecognitionStatus.tsx   # Live status pill (Recognizing, Confirmed, Idle)
 │   ├── TranscriptView.tsx      # Running conversation list with replay buttons
+│   ├── SuggestedReplies.tsx    # Suggested responses section (exclusively partner mode)
+│   ├── SignReferenceModal.tsx  # Detailed PSL sign reference and learning viewer
 │   ├── SessionControlBar.tsx   # Switch camera, End, Clear, Change mode toolbar
 │   └── ErrorBanner.tsx         # Permission denied, camera disconnect, backend offline
 ├── lib/
@@ -265,10 +306,11 @@ Sign flow/
 │   ├── websocketClient.ts      # WebSocket connection, reconnection, and JSON parsing
 │   ├── stateMachine.ts         # Stability window, gesture boundary, deduplication
 │   ├── speech.ts               # Web Speech API wrapper (speak, replay, voice picker)
+│   ├── replyCatalogue.ts       # Verified PSL reference catalogue and matching logic
 │   └── config.ts               # Ports, timeouts, stability thresholds
 ├── types/
 │   ├── contract.ts             # WebSocket v1.0 request/response TypeScript interfaces
-│   └── app.ts                  # App-level types, messages, UI state
+│   └── app.ts                  # App-level types, messages, UI state, replies
 ├── cv-service/
 │   ├── main.py                 # FastAPI app & WebSocket endpoint (/ws/predict)
 │   ├── preprocessing.py        # Canonical wrist-centering & scale normalization

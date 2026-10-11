@@ -62,6 +62,7 @@ Specific signs in the demo are subject to dataset verification — substitute an
 - Stable display — no rapid flickering between predictions or accidental repeated speech
 - Responsive layout: desktop and mobile browsers
 - Accessible: keyboard-operable, proper contrast, semantic HTML, screen-reader announcements for recognition results
+- Suggested Sign Replies (exclusively for "Someone with me is signing" mode): contextual response suggestions mapped to a verified PSL sign reference catalogue, showing step-by-step guidance and explicit notices when visual demonstration assets are pending verification
 
 **Conditional on investigation (first tasks before committing to full vocabulary):**
 - PSL dataset feasibility: existence, licensing, quality, label coverage for target words

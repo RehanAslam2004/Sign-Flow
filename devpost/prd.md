@@ -85,6 +85,16 @@ Source: `scope.md > The Unique Kernel` and `scope.md > Who It's For`.
 - Text remains visible indefinitely during the active session.
 - Transcript is ephemeral in memory; ending a session offers the option to view the final transcript or clear it.
 
+### Suggested Sign Replies (Partner Mode Exclusively)
+- Source: `scope.md > The POC Boundary`.
+- Purpose: Help a hearing conversation partner respond to a signing partner whose message SignFlow has translated.
+- **Strict Mode Gating:** Active ONLY when `mode === 'partner'` ("Someone with me is signing"). Never rendered, triggered, or queried in "I'm the one signing" mode.
+- **Trigger & Deduplication:** Triggers exclusively on newly committed transcript messages. Live fluctuating predictions or identical repeated messages do not fire repeat requests.
+- **Contextual Suggestions:** Presents 2–4 concise, contextually relevant response options (e.g., offering help, confirming understanding, asking for clarification).
+- **Verified PSL Reference Detail:** Selecting a reply opens a mobile-friendly detail view showing the full response, intended meaning, step-by-step signing instructions, and visual demonstrations if available.
+- **Truthful Validation Status:** When visual assets are not yet verified or recorded, the UI clearly displays "Verified sign demonstration not available yet" rather than fabricated gestures. LLMs are never permitted to hallucinate hand signs.
+- **Session Cleanup:** Switching modes, clearing transcripts, or ending the session clears suggestions and aborts pending requests.
+
 ### Session Management & Recovery
 - Session states: `Ready` → `Camera starting` → `Translating` → `Paused/Error` → `Ended`.
 - Switching cameras pauses recognition briefly, switches the video source, and resumes without losing conversation history.
@@ -118,7 +128,7 @@ Source: `scope.md > The Unique Kernel` and `scope.md > Who It's For`.
 - **Use-Case Selection over Identity Labels:** Modes are based on physical setup (*"I'm signing"* vs. *"Someone with me is signing"*) instead of requiring users to label themselves as deaf or hearing.
 - **Stability Window + Neutral Reset:** Prevents rapid prediction flickering and stops held signs from spamming duplicate words into the transcript.
 - **Utterance-Level Speech rather than Word-by-Word:** Waiting for an utterance boundary or brief pause creates human-sounding phrases rather than robotic, overlapping audio bursts.
-- **Suggested Sign Replies as Stretch Feature:** Curating verified, licensed PSL video/visual demonstration clips for replies is documented as a valuable stretch goal, but deferred from the critical path so it does not jeopardize the core recognition demo.
+- **Suggested Sign Replies (Partner Mode):** Contextually recommends verified responses to help hearing partners reply to recognized signing; rigorously bounded to verified PSL catalogue with truthful pending-verification notices.
 - **Privacy-First Ephemeral Video:** Camera frames are evaluated in memory and discarded immediately; no video or audio is ever recorded, transmitted for storage, or saved to a database.
 
 ## What We're Building
@@ -133,10 +143,11 @@ Source: `scope.md > The Unique Kernel` and `scope.md > Who It's For`.
 8. Persistent in-session conversation transcript.
 9. Comprehensive, dignified recovery states (permission denied, camera disconnected, no hands detected, unconfirmed sign).
 10. Session controls (switch camera, end session, clear transcript, change mode).
+11. Suggested Sign Replies (strictly partner mode): 2–4 contextual reply suggestions with verified PSL sign reference detail viewer and clear pending-verification disclaimers.
 
 ## Deferred From the POC
 
-- **Suggested Sign Replies with Video Demonstrations:** Deferred to stretch goal; requires verified video clip acquisition and reply-mapping heuristics.
+- **Large-Scale Video Clip Production:** Broad studio video recording of hundreds of colloquial PSL phrases deferred to subsequent releases.
 - **In-line Transcript Editing:** Deferred; read-and-replay meets the proof-of-concept need without adding text editing complexity.
 - **Speech-to-Text Reverse Communication:** Deferred; out of scope for the single-direction hackathon prototype.
 - **User Accounts and Saved Conversation History:** Deferred; no database or login required for the core loop.
