@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Sparkles, Volume2, Hand, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Volume2, Sparkles } from 'lucide-react';
 import LandingSurface from '@/components/LandingSurface';
 import CameraViewport from '@/components/CameraViewport';
 import RecognitionStatus from '@/components/RecognitionStatus';
@@ -19,6 +19,7 @@ import { CONFIG } from '@/lib/config';
 
 export default function SignFlowHome() {
   const [mode, setMode] = useState<UsageMode>(null);
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
   // Connection & Recognition UI state
   const [serviceStatus, setServiceStatus] = useState<ConnectionStatus>('connecting');
@@ -40,6 +41,16 @@ export default function SignFlowHome() {
   const lastFrameTimeRef = useRef<number>(0);
   const frameCounterRef = useRef<number>(0);
   const sessionIdRef = useRef<string>(`sess_${Date.now()}`);
+
+  // Handle Mode Selection and set appropriate default camera
+  const handleSelectMode = (selectedMode: 'signing' | 'partner') => {
+    setMode(selectedMode);
+    setFacingMode(selectedMode === 'partner' ? 'environment' : 'user');
+  };
+
+  const handleToggleFacingMode = () => {
+    setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
+  };
 
   // 1. Initialize State Machine
   useEffect(() => {
@@ -191,41 +202,48 @@ export default function SignFlowHome() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
-      {/* Top Navigation */}
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-[#068D9D] flex items-center justify-center text-white font-bold text-lg shadow-sm">
+      {/* Top Navigation Bar */}
+      <header className="border-b border-slate-200/90 bg-white/90 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 h-14 sm:h-16 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#068D9D] flex items-center justify-center text-white font-bold text-base sm:text-lg shadow-xs shrink-0">
               S
             </div>
-            <div>
-              <span className="font-extrabold text-slate-900 tracking-tight text-lg">
+            <div className="min-w-0">
+              <span className="font-extrabold text-slate-900 tracking-tight text-base sm:text-lg">
                 SignFlow
               </span>
-              <span className="hidden sm:inline-block ml-2 text-xs text-slate-500 font-medium border-l border-slate-200 pl-2">
+              <span className="hidden md:inline-block ml-2 text-xs text-slate-500 font-medium border-l border-slate-200 pl-2">
                 Pakistan Sign Language Bridge
               </span>
             </div>
           </div>
 
           {mode !== null && (
-            <div className="flex items-center gap-2">
-              <label className="hidden sm:inline-flex items-center gap-2 text-xs text-slate-600 bg-slate-100 px-2.5 py-1.5 rounded-lg cursor-pointer">
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Auto Speech Toggle */}
+              <label
+                className="inline-flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100/90 hover:bg-slate-200/80 px-2.5 py-1.5 rounded-xl cursor-pointer select-none transition-colors"
+                title="Automatically speak confirmed phrases after pause"
+              >
                 <input
                   type="checkbox"
                   checked={autoSpeechEnabled}
                   onChange={(e) => setAutoSpeechEnabled(e.target.checked)}
-                  className="rounded text-[#068D9D] focus:ring-[#068D9D]"
+                  className="w-3.5 h-3.5 rounded text-[#068D9D] focus:ring-[#068D9D]"
                 />
-                <span>Auto-speech</span>
+                <span className="font-medium text-[11px] sm:text-xs">Auto-speak</span>
               </label>
 
+              {/* Change Mode Button */}
               <button
                 onClick={() => setMode(null)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+                className="min-h-[38px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors focus-visible:ring-2 focus-visible:ring-[#068D9D]"
+                aria-label="Return to situation selection screen"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Change Mode</span>
+                <ArrowLeft className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                <span className="hidden sm:inline">Change Mode</span>
+                <span className="sm:hidden">Mode</span>
               </button>
             </div>
           )}
@@ -235,9 +253,9 @@ export default function SignFlowHome() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col">
         {mode === null ? (
-          <LandingSurface onSelectMode={(selectedMode) => setMode(selectedMode)} />
+          <LandingSurface onSelectMode={handleSelectMode} />
         ) : (
-          <div className="max-w-6xl mx-auto w-full px-4 py-6 flex-1 flex flex-col gap-5">
+          <div className="max-w-6xl mx-auto w-full px-3 sm:px-4 py-4 sm:py-6 flex-1 flex flex-col gap-4 sm:gap-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
             {/* Backend Offline Warning Banner if disconnected */}
             {serviceStatus === 'disconnected' && (
               <ErrorBanner
@@ -251,35 +269,39 @@ export default function SignFlowHome() {
               />
             )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 items-start">
-              {/* Left Column: Live Camera Viewport */}
-              <div className="lg:col-span-7 flex flex-col gap-4">
+            {/* Main Translator Grid (Desktop 2-Col, Mobile Vertical Stack) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-6 flex-1 items-start">
+              {/* Camera Column (Left on Desktop, Top on Mobile) */}
+              <div className="lg:col-span-7 flex flex-col gap-3 sm:gap-4">
                 <CameraViewport
                   mode={mode}
                   onVideoReady={handleVideoReady}
                   statusText={statusText}
                   isRecognizing={candidateSign !== null}
                   handsDetected={handsDetected}
+                  facingMode={facingMode}
+                  onToggleFacingMode={handleToggleFacingMode}
                 />
 
-                {/* Session Control Toolbar */}
-                <SessionControlBar
-                  onSwitchCamera={() => {
-                    // Handled automatically via CameraViewport flip button
-                  }}
-                  onEndSession={handleEndSession}
-                  onClearTranscript={handleClearTranscript}
-                  onChangeMode={() => setMode(null)}
-                  hasMessages={messages.length > 0}
-                />
+                {/* Session Control Toolbar directly beneath camera on desktop */}
+                <div className="hidden lg:block">
+                  <SessionControlBar
+                    onSwitchCamera={handleToggleFacingMode}
+                    onEndSession={handleEndSession}
+                    onClearTranscript={handleClearTranscript}
+                    onChangeMode={() => setMode(null)}
+                    hasMessages={messages.length > 0}
+                  />
+                </div>
               </div>
 
-              {/* Right Column: Active Translation, Utterance Builder, and Transcript */}
-              <div className="lg:col-span-5 flex flex-col gap-4">
+              {/* Translation & Conversation Column (Right on Desktop, Below on Mobile) */}
+              <div className="lg:col-span-5 flex flex-col gap-4 sm:gap-5">
                 {/* Active Translation Card */}
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div className="bg-white rounded-2xl p-4 sm:p-6 border border-slate-200/90 shadow-sm flex flex-col justify-between gap-4">
                   <div>
-                    <div className="mb-4">
+                    {/* Live Recognition Status Row */}
+                    <div className="mb-3.5">
                       <RecognitionStatus
                         statusText={statusText}
                         candidateSign={candidateSign}
@@ -289,44 +311,59 @@ export default function SignFlowHome() {
                       />
                     </div>
 
-                    {/* Active Utterance Building Display */}
-                    <div className="p-5 rounded-xl bg-slate-50 border border-slate-100 min-h-[110px] flex flex-col justify-center">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                        Current Message
+                    {/* Current Utterance Display Box */}
+                    <div
+                      className="p-4 sm:p-5 rounded-xl bg-slate-50 border border-slate-200/70 min-h-[100px] sm:min-h-[110px] flex flex-col justify-center transition-all"
+                      aria-live="polite"
+                    >
+                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                        Current Translation
                       </span>
                       {activeUtterance.length > 0 ? (
-                        <p className="text-2xl font-extrabold text-slate-900 tracking-wide">
+                        <p className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-wide break-words">
                           {activeUtterance.join(' ')}
                         </p>
                       ) : (
-                        <p className="text-slate-400 text-sm">
+                        <p className="text-slate-500 text-xs sm:text-sm leading-relaxed">
                           {handsDetected
-                            ? 'Ready — perform a verified sign...'
-                            : 'Position your hands in the camera frame to sign...'}
+                            ? 'Ready — perform a verified PSL sign...'
+                            : 'Position hands in the camera frame to start signing...'}
                         </p>
                       )}
                     </div>
                   </div>
 
-                  {/* Speech Controls */}
-                  <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between gap-3">
+                  {/* Primary Finish & Speak Action */}
+                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
                     <button
                       onClick={handleFinishAndSpeak}
                       disabled={activeUtterance.length === 0}
-                      className={`flex-1 py-3 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-all ${
+                      className={`min-h-[48px] flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all focus-visible:ring-2 focus-visible:ring-[#068D9D] ${
                         activeUtterance.length > 0
-                          ? 'bg-[#068D9D] hover:bg-[#05707d] text-white shadow-sm'
+                          ? 'bg-[#068D9D] hover:bg-[#05707d] text-white shadow-sm active:scale-[0.99]'
                           : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                       }`}
+                      aria-label="Finish and speak translated message"
                     >
-                      <Volume2 className="w-4 h-4" />
+                      <Volume2 className="w-4 h-4 shrink-0" aria-hidden="true" />
                       <span>Finish & Speak</span>
                     </button>
                   </div>
                 </div>
 
-                {/* Conversation Transcript */}
-                <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex-1 min-h-[280px]">
+                {/* Session Control Toolbar on Mobile (visible only on mobile) */}
+                <div className="lg:hidden">
+                  <SessionControlBar
+                    onSwitchCamera={handleToggleFacingMode}
+                    onEndSession={handleEndSession}
+                    onClearTranscript={handleClearTranscript}
+                    onChangeMode={() => setMode(null)}
+                    hasMessages={messages.length > 0}
+                  />
+                </div>
+
+                {/* Conversation Transcript Card */}
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-sm flex-1 min-h-[240px] sm:min-h-[280px]">
                   <TranscriptView
                     messages={messages}
                     onReplay={(text) => speechEngine.speak(text)}

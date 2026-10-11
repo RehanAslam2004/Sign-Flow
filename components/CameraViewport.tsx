@@ -10,6 +10,8 @@ interface CameraViewportProps {
   statusText?: string;
   isRecognizing?: boolean;
   handsDetected?: boolean;
+  facingMode?: 'user' | 'environment';
+  onToggleFacingMode?: () => void;
 }
 
 export default function CameraViewport({
@@ -18,12 +20,17 @@ export default function CameraViewport({
   statusText = 'Ready',
   isRecognizing = false,
   handsDetected = false,
+  facingMode: externalFacingMode,
+  onToggleFacingMode,
 }: CameraViewportProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
-  const [facingMode, setFacingMode] = useState<'user' | 'environment'>(
+  const [internalFacingMode, setInternalFacingMode] = useState<'user' | 'environment'>(
     mode === 'partner' ? 'environment' : 'user'
   );
+
+  const activeFacingMode = externalFacingMode !== undefined ? externalFacingMode : internalFacingMode;
+
   const [errorState, setErrorState] = useState<'none' | 'denied' | 'unavailable'>('none');
   const [isInitializing, setIsInitializing] = useState(true);
 
@@ -70,7 +77,7 @@ export default function CameraViewport({
   }, [onVideoReady, stream]);
 
   useEffect(() => {
-    startCamera(facingMode);
+    startCamera(activeFacingMode);
 
     return () => {
       if (stream) {
@@ -78,39 +85,47 @@ export default function CameraViewport({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [facingMode]);
+  }, [activeFacingMode]);
 
-  const toggleCamera = () => {
-    setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
+  const handleToggle = () => {
+    if (onToggleFacingMode) {
+      onToggleFacingMode();
+    } else {
+      setInternalFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
+    }
   };
 
   return (
-    <div className="relative w-full aspect-[4/3] sm:aspect-video bg-slate-900 rounded-2xl overflow-hidden shadow-md border border-slate-200">
+    <div
+      className="relative w-full aspect-[4/3] sm:aspect-video max-h-[38vh] sm:max-h-[460px] lg:max-h-[520px] bg-slate-900 rounded-2xl overflow-hidden shadow-sm border border-slate-200/80"
+      aria-label="Camera signing preview"
+    >
       {/* Live Video Element */}
       <video
         ref={videoRef}
         playsInline
         muted
+        aria-hidden="true"
         className={`w-full h-full object-cover transition-opacity duration-300 ${
-          facingMode === 'user' ? 'scale-x-[-1]' : ''
+          activeFacingMode === 'user' ? 'scale-x-[-1]' : ''
         } ${errorState !== 'none' || isInitializing ? 'opacity-0' : 'opacity-100'}`}
       />
 
       {/* Subtle Hand-Framing Guide Overlay */}
       {errorState === 'none' && !isInitializing && (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="w-3/4 h-3/4 border-2 border-dashed border-white/30 rounded-2xl flex flex-col justify-between p-4 transition-all duration-300">
-            <div className="flex justify-between items-center">
-              <span className="text-[11px] font-medium tracking-wide uppercase text-white/70 bg-black/40 px-2.5 py-1 rounded-md backdrop-blur-sm">
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center p-3 sm:p-5">
+          <div className="w-full h-full max-w-[85%] max-h-[85%] border-2 border-dashed border-white/40 rounded-xl sm:rounded-2xl flex flex-col justify-between p-3 sm:p-4 transition-all duration-300">
+            <div className="flex justify-between items-center gap-2">
+              <span className="text-[10px] sm:text-[11px] font-semibold tracking-wider uppercase text-white/90 bg-black/50 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md backdrop-blur-sm">
                 Signing Area
               </span>
               {handsDetected ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/70 border border-emerald-500/30 px-2.5 py-1 rounded-md backdrop-blur-sm">
-                  <Hand className="w-3.5 h-3.5" />
-                  Hands in frame
+                <span className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-semibold text-emerald-300 bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-1 rounded-md backdrop-blur-sm">
+                  <Hand className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>Hands detected</span>
                 </span>
               ) : (
-                <span className="text-xs text-white/60 bg-black/40 px-2 py-1 rounded-md backdrop-blur-sm">
+                <span className="text-[11px] sm:text-xs text-white/80 bg-black/50 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md backdrop-blur-sm">
                   Position hands here
                 </span>
               )}
@@ -120,29 +135,31 @@ export default function CameraViewport({
       )}
 
       {/* Top Status & Camera Switch Bar */}
-      <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-auto">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white text-xs font-medium border border-white/10 shadow-sm">
+      <div className="absolute top-2.5 sm:top-3 left-2.5 sm:left-3 right-2.5 sm:right-3 flex items-center justify-between pointer-events-auto gap-2">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/85 backdrop-blur-md text-white text-xs font-medium border border-white/10 shadow-sm">
           <span
-            className={`w-2 h-2 rounded-full ${
+            className={`w-2 h-2 rounded-full shrink-0 ${
               errorState !== 'none'
                 ? 'bg-rose-500'
                 : isRecognizing
-                ? 'bg-[#068D9D] animate-ping'
+                ? 'bg-[#068D9D]'
                 : 'bg-emerald-400'
             }`}
+            aria-hidden="true"
           />
-          <span>{statusText}</span>
+          <span className="truncate max-w-[150px] sm:max-w-none">{statusText}</span>
         </div>
 
         {errorState === 'none' && (
           <button
-            onClick={toggleCamera}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/80 hover:bg-slate-800 text-white text-xs font-medium border border-white/10 shadow-sm transition-colors"
+            onClick={handleToggle}
+            className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-full bg-slate-900/85 hover:bg-slate-800 text-white text-xs font-semibold border border-white/10 shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-[#068D9D]"
+            aria-label={`Switch camera, currently using ${activeFacingMode === 'user' ? 'front' : 'rear'} camera`}
             title="Switch front/rear camera"
           >
-            <SwitchCamera className="w-3.5 h-3.5" />
+            <SwitchCamera className="w-4 h-4" aria-hidden="true" />
             <span className="hidden sm:inline">
-              {facingMode === 'user' ? 'Switch to Rear' : 'Switch to Front'}
+              {activeFacingMode === 'user' ? 'Use Rear' : 'Use Front'}
             </span>
           </button>
         )}
@@ -150,25 +167,25 @@ export default function CameraViewport({
 
       {/* Loading / Starting State */}
       {isInitializing && errorState === 'none' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-slate-900/90 gap-3">
-          <RefreshCw className="w-8 h-8 animate-spin text-[#068D9D]" />
-          <p className="text-sm font-medium text-slate-300">Initializing camera...</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-slate-900/95 gap-3 p-4">
+          <RefreshCw className="w-7 h-7 sm:w-8 sm:h-8 animate-spin text-[#068D9D]" aria-hidden="true" />
+          <p className="text-xs sm:text-sm font-medium text-slate-300 text-center">Starting camera feed...</p>
         </div>
       )}
 
       {/* Permission Denied Empty State */}
       {errorState === 'denied' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-slate-900 text-white">
-          <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mb-4">
-            <Camera className="w-6 h-6" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-5 sm:p-6 bg-slate-900 text-white">
+          <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mb-3">
+            <Camera className="w-6 h-6" aria-hidden="true" />
           </div>
-          <h3 className="text-lg font-bold mb-2">Camera access is needed</h3>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-sm mb-6 leading-relaxed">
-            SignFlow needs camera access to recognize signing. Please allow camera access in your browser settings, then click try again.
+          <h3 className="text-base sm:text-lg font-bold mb-1.5 text-white">Camera access is needed</h3>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-sm mb-5 leading-relaxed">
+            SignFlow needs camera access to recognize signing. Please allow camera access in your browser settings, then try again.
           </p>
           <button
-            onClick={() => startCamera(facingMode)}
-            className="px-5 py-2.5 rounded-xl bg-[#068D9D] hover:bg-[#05707d] text-white font-semibold text-xs transition-colors"
+            onClick={() => startCamera(activeFacingMode)}
+            className="min-h-[44px] px-6 py-2.5 rounded-xl bg-[#068D9D] hover:bg-[#05707d] text-white font-semibold text-xs sm:text-sm transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-white"
           >
             Try Again
           </button>
@@ -177,17 +194,17 @@ export default function CameraViewport({
 
       {/* Camera Unavailable Empty State */}
       {errorState === 'unavailable' && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-slate-900 text-white">
-          <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mb-4">
-            <AlertCircle className="w-6 h-6" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-5 sm:p-6 bg-slate-900 text-white">
+          <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mb-3">
+            <AlertCircle className="w-6 h-6" aria-hidden="true" />
           </div>
-          <h3 className="text-lg font-bold mb-2">Camera disconnected or unavailable</h3>
-          <p className="text-xs sm:text-sm text-slate-300 max-w-sm mb-6 leading-relaxed">
-            Your camera stopped working or no video device was detected. Please check your connection or try another device.
+          <h3 className="text-base sm:text-lg font-bold mb-1.5 text-white">Camera unavailable</h3>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-sm mb-5 leading-relaxed">
+            Your camera stopped working or no video device was detected. Please check your connection or choose another camera.
           </p>
           <button
-            onClick={() => startCamera(facingMode)}
-            className="px-5 py-2.5 rounded-xl bg-[#53599A] hover:bg-[#434880] text-white font-semibold text-xs transition-colors"
+            onClick={() => startCamera(activeFacingMode)}
+            className="min-h-[44px] px-6 py-2.5 rounded-xl bg-[#53599A] hover:bg-[#434880] text-white font-semibold text-xs sm:text-sm transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-white"
           >
             Reconnect Camera
           </button>
