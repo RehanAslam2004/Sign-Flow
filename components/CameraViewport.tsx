@@ -27,6 +27,11 @@ export default function CameraViewport({
 }: CameraViewportProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const onVideoReadyRef = useRef(onVideoReady);
+
+  useEffect(() => {
+    onVideoReadyRef.current = onVideoReady;
+  }, [onVideoReady]);
 
   const [internalFacingMode, setInternalFacingMode] = useState<'user' | 'environment'>(
     mode === 'partner' ? 'environment' : 'user'
@@ -56,6 +61,18 @@ export default function CameraViewport({
 
   const startCamera = useCallback(
     async (facing: 'user' | 'environment') => {
+      // If we already have a live, playing stream, do not reload
+      if (
+        streamRef.current &&
+        streamRef.current.active &&
+        streamRef.current.getVideoTracks().some((t) => t.readyState === 'live') &&
+        videoRef.current &&
+        videoRef.current.srcObject
+      ) {
+        setIsInitializing(false);
+        return;
+      }
+
       setIsInitializing(true);
       setErrorState('none');
 
@@ -97,15 +114,32 @@ export default function CameraViewport({
 
         if (videoRef.current && acquiredStream) {
           videoRef.current.srcObject = acquiredStream;
-          await videoRef.current.play();
-          if (onVideoReady) {
-            onVideoReady(videoRef.current);
+          try {
+            await videoRef.current.play();
+          } catch (playErr: any) {
+            if (playErr?.name === 'AbortError') {
+              // Harmless play interruption, do not crash camera
+              setIsInitializing(false);
+              return;
+            }
+            throw playErr;
+          }
+
+          if (onVideoReadyRef.current) {
+            onVideoReadyRef.current(videoRef.current);
           }
         }
         setIsInitializing(false);
       } catch (err: unknown) {
-        console.error('Camera initialization error:', err);
         const error = err as { name?: string; message?: string };
+
+        // AbortError on play() is benign and should never enter error state
+        if (error?.name === 'AbortError') {
+          setIsInitializing(false);
+          return;
+        }
+
+        console.error('Camera initialization error:', err);
 
         if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
           setErrorState('denied');
@@ -122,10 +156,10 @@ export default function CameraViewport({
         setIsInitializing(false);
       }
     },
-    [onVideoReady, stopCurrentStream]
+    [stopCurrentStream]
   );
 
-  // Initialize camera and cleanup reliably on unmount or facing mode change
+  // Initialize camera and cleanup reliably ONLY when activeFacingMode changes or on unmount
   useEffect(() => {
     startCamera(activeFacingMode);
 

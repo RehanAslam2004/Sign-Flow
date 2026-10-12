@@ -210,13 +210,16 @@ export default function SignFlowHome() {
     animationFrameIdRef.current = requestAnimationFrame(processVideoFrame);
   }, []);
 
-  const handleVideoReady = (video: HTMLVideoElement) => {
-    videoElementRef.current = video;
-    if (animationFrameIdRef.current) {
-      cancelAnimationFrame(animationFrameIdRef.current);
-    }
-    animationFrameIdRef.current = requestAnimationFrame(processVideoFrame);
-  };
+  const handleVideoReady = useCallback(
+    (video: HTMLVideoElement) => {
+      videoElementRef.current = video;
+      if (animationFrameIdRef.current) {
+        cancelAnimationFrame(animationFrameIdRef.current);
+      }
+      animationFrameIdRef.current = requestAnimationFrame(processVideoFrame);
+    },
+    [processVideoFrame]
+  );
 
   // Actions
   const handleEndSession = () => {
