@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Camera, SwitchCamera, AlertCircle, RefreshCw, Hand } from 'lucide-react';
+import { Camera, SwitchCamera, AlertCircle, RefreshCw, Hand, VideoOff } from 'lucide-react';
 import { UsageMode } from '@/types/app';
 
 interface CameraViewportProps {
@@ -26,68 +26,127 @@ export default function CameraViewport({
   children,
 }: CameraViewportProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
   const [internalFacingMode, setInternalFacingMode] = useState<'user' | 'environment'>(
     mode === 'partner' ? 'environment' : 'user'
   );
 
   const activeFacingMode = externalFacingMode !== undefined ? externalFacingMode : internalFacingMode;
 
-  const [errorState, setErrorState] = useState<'none' | 'denied' | 'unavailable'>('none');
+  const [errorState, setErrorState] = useState<'none' | 'denied' | 'in_use' | 'unavailable'>('none');
   const [isInitializing, setIsInitializing] = useState(true);
 
-  const startCamera = useCallback(async (facing: 'user' | 'environment') => {
-    setIsInitializing(true);
-    setErrorState('none');
-
-    // Stop existing stream tracks
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-    }
-
-    try {
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: facing,
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      };
-
-      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-      setStream(newStream);
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = newStream;
-        await videoRef.current.play();
-        if (onVideoReady) {
-          onVideoReady(videoRef.current);
+  // Reliably release hardware camera lock
+  const stopCurrentStream = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (err) {
+          console.warn('Error stopping track:', err);
         }
-      }
-      setIsInitializing(false);
-    } catch (err: unknown) {
-      console.error('Camera initialization error:', err);
-      const error = err as { name?: string };
-      if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
-        setErrorState('denied');
-      } else {
-        setErrorState('unavailable');
-      }
-      setIsInitializing(false);
+      });
+      streamRef.current = null;
     }
-  }, [onVideoReady, stream]);
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  }, []);
 
+  const startCamera = useCallback(
+    async (facing: 'user' | 'environment') => {
+      setIsInitializing(true);
+      setErrorState('none');
+
+      // Stop any prior active stream to release hardware device lock
+      stopCurrentStream();
+
+      let acquiredStream: MediaStream | null = null;
+
+      try {
+        // Primary attempt: preferred facing mode and resolution
+        const constraints: MediaStreamConstraints = {
+          video: {
+            facingMode: facing,
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        };
+
+        try {
+          acquiredStream = await navigator.mediaDevices.getUserMedia(constraints);
+        } catch (constraintErr: any) {
+          // If preferred facing mode or resolution fails on desktop webcams, fallback to basic video
+          if (
+            constraintErr?.name === 'OverconstrainedError' ||
+            constraintErr?.name === 'ConstraintNotSatisfiedError' ||
+            constraintErr?.name === 'NotFoundError'
+          ) {
+            acquiredStream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false,
+            });
+          } else {
+            throw constraintErr;
+          }
+        }
+
+        streamRef.current = acquiredStream;
+
+        if (videoRef.current && acquiredStream) {
+          videoRef.current.srcObject = acquiredStream;
+          await videoRef.current.play();
+          if (onVideoReady) {
+            onVideoReady(videoRef.current);
+          }
+        }
+        setIsInitializing(false);
+      } catch (err: unknown) {
+        console.error('Camera initialization error:', err);
+        const error = err as { name?: string; message?: string };
+
+        if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
+          setErrorState('denied');
+        } else if (
+          error?.name === 'NotReadableError' ||
+          error?.name === 'TrackStartError' ||
+          (error?.message && error.message.toLowerCase().includes('device in use'))
+        ) {
+          // Hardware camera is locked by another tab, browser window, or application
+          setErrorState('in_use');
+        } else {
+          setErrorState('unavailable');
+        }
+        setIsInitializing(false);
+      }
+    },
+    [onVideoReady, stopCurrentStream]
+  );
+
+  // Initialize camera and cleanup reliably on unmount or facing mode change
   useEffect(() => {
     startCamera(activeFacingMode);
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-      }
+      stopCurrentStream();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFacingMode]);
+  }, [activeFacingMode, startCamera, stopCurrentStream]);
+
+  // Release camera hardware immediately when tab unloads, hides, or reloads
+  useEffect(() => {
+    const handleRelease = () => {
+      stopCurrentStream();
+    };
+    window.addEventListener('beforeunload', handleRelease);
+    window.addEventListener('pagehide', handleRelease);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleRelease);
+      window.removeEventListener('pagehide', handleRelease);
+    };
+  }, [stopCurrentStream]);
 
   const handleToggle = () => {
     if (onToggleFacingMode) {
@@ -190,6 +249,25 @@ export default function CameraViewport({
             className="min-h-[44px] px-6 py-2.5 rounded-xl bg-[#068D9D] hover:bg-[#05707d] text-white font-semibold text-xs sm:text-sm transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-white"
           >
             Try Again
+          </button>
+        </div>
+      )}
+
+      {/* Camera In Use by Another Tab or App Empty State */}
+      {errorState === 'in_use' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-5 sm:p-6 bg-slate-900 text-white z-20">
+          <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mb-3">
+            <VideoOff className="w-6 h-6" aria-hidden="true" />
+          </div>
+          <h3 className="text-base sm:text-lg font-bold mb-1.5 text-white">Camera is in use</h3>
+          <p className="text-xs sm:text-sm text-slate-300 max-w-sm mb-5 leading-relaxed">
+            Another browser tab, window, or application is currently locking your webcam. Please close any other open SignFlow tabs, then click Retry.
+          </p>
+          <button
+            onClick={() => startCamera(activeFacingMode)}
+            className="min-h-[44px] px-6 py-2.5 rounded-xl bg-[#068D9D] hover:bg-[#05707d] text-white font-semibold text-xs sm:text-sm transition-colors shadow-sm focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+          >
+            Retry Camera
           </button>
         </div>
       )}
