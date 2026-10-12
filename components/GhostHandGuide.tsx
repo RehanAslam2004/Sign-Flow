@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { RotateCcw, X } from 'lucide-react';
 import { SuggestedReply, UsageMode, SignMotionStep } from '@/types/app';
 
 interface GhostHandGuideProps {
@@ -13,7 +12,6 @@ interface GhostHandGuideProps {
 export default function GhostHandGuide({
   reply,
   mode,
-  onClose,
 }: GhostHandGuideProps) {
   const [animationProgress, setAnimationProgress] = useState(0); // 0 to 1
   const animFrameRef = useRef<number | null>(null);
@@ -27,11 +25,11 @@ export default function GhostHandGuide({
     startTimeRef.current = performance.now();
   }, [reply?.id]);
 
-  // Smooth continuous animation loop
+  // Smooth continuous animation loop (calm 2.8s cycle)
   useEffect(() => {
     if (!reference || motionSteps.length === 0) return;
 
-    const duration = 2800; // 2.8s natural cycle for full sign phrase demonstration
+    const duration = 2800;
 
     const loop = (now: number) => {
       const elapsed = (now - startTimeRef.current) % duration;
@@ -52,246 +50,223 @@ export default function GhostHandGuide({
     return null;
   }
 
-  const handleReplay = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    startTimeRef.current = performance.now();
-  };
-
   // Determine current motion step and phase
   // Phase 1 (0.00 - 0.25): Initial Preparatory Pose (Step 1)
-  // Phase 2 (0.25 - 0.80): Dynamic Motion Stroke (Step 2)
-  // Phase 3 (0.80 - 1.00): Gentle Hold on completed pose
+  // Phase 2 (0.25 - 0.80): Gentle Dynamic Motion Stroke (Step 2)
+  // Phase 3 (0.80 - 1.00): Rest Hold on completed gesture
   const hasTwoSteps = motionSteps.length > 1;
   const currentStep =
     hasTwoSteps && animationProgress >= 0.25 ? motionSteps[1] : motionSteps[0] || undefined;
   const trajectory = currentStep?.motionTrajectory || 'steady_hold';
 
-  // Compute smooth motion interpolation
+  // Compute calm, understated motion interpolation (no aggressive jumping or scaling)
   let deltaX = 0;
   let deltaY = 0;
   let rotateDeg = 0;
-  let scale = 1;
 
   if (animationProgress < 0.25) {
-    // Prep stage: subtle breathing micro-float
-    deltaY = Math.sin(animationProgress * Math.PI * 4) * 2;
+    // Prep stage: subtle breathing float
+    deltaY = Math.sin(animationProgress * Math.PI * 4) * 1.5;
   } else if (animationProgress < 0.8) {
-    // Active motion stage: smooth sinusoidal ease-in-out
+    // Active motion stage: smooth sinusoidal easing
     const t = (animationProgress - 0.25) / 0.55;
     const eased = 0.5 - 0.5 * Math.cos(t * Math.PI);
 
     if (trajectory === 'temple_outward_arc') {
-      // Starts near temple and arcs smoothly outward and forward toward partner
-      deltaX = -10 + 26 * eased;
-      deltaY = -12 + 20 * eased;
-      rotateDeg = -6 + 14 * eased;
-      scale = 0.95 + 0.12 * eased;
+      // Arcs gently forward and outward in traditional Salam
+      deltaX = -4 + 14 * eased;
+      deltaY = -6 + 10 * eased;
+      rotateDeg = -3 + 7 * eased;
     } else if (trajectory === 'forward_sweep') {
-      // Glides forward toward partner
-      deltaY = -18 * eased;
-      deltaX = 6 * eased;
-      scale = 1 + 0.14 * eased;
-    } else if (trajectory === 'upward_lift') {
-      // Lifts upward in cooperative support
-      deltaY = -22 * eased;
+      // Glides gently forward toward partner
+      deltaY = -10 * eased;
       deltaX = 3 * eased;
-      scale = 1 + 0.08 * eased;
+    } else if (trajectory === 'upward_lift') {
+      // Lifts gently upward in cooperative support
+      deltaY = -12 * eased;
+      deltaX = 2 * eased;
     } else if (trajectory === 'downward_sweep') {
-      // Sweeps gently downward and outward
-      deltaY = 16 * eased;
-      deltaX = 14 * eased;
-      rotateDeg = -8 * eased;
+      // Sweeps gently downward
+      deltaY = 10 * eased;
+      deltaX = 6 * eased;
+      rotateDeg = -4 * eased;
     } else if (trajectory === 'outward_arc') {
-      // Rotates outward
-      deltaX = 22 * eased;
-      deltaY = -6 * eased;
-      rotateDeg = 16 * eased;
+      // Rotates gently outward
+      deltaX = 12 * eased;
+      deltaY = -4 * eased;
+      rotateDeg = 8 * eased;
     } else {
-      deltaY = Math.sin(animationProgress * Math.PI * 2) * 2.5;
+      deltaY = Math.sin(animationProgress * Math.PI * 2) * 1.5;
     }
   } else {
-    // Hold stage: resting at final completion position
+    // Hold stage: resting calmly at completion position
     if (trajectory === 'temple_outward_arc') {
-      deltaX = 16;
-      deltaY = 8;
-      rotateDeg = 8;
-      scale = 1.07;
+      deltaX = 10;
+      deltaY = 4;
+      rotateDeg = 4;
     } else if (trajectory === 'forward_sweep') {
-      deltaY = -18;
-      deltaX = 6;
-      scale = 1.14;
-    } else if (trajectory === 'upward_lift') {
-      deltaY = -22;
+      deltaY = -10;
       deltaX = 3;
-      scale = 1.08;
+    } else if (trajectory === 'upward_lift') {
+      deltaY = -12;
+      deltaX = 2;
     } else if (trajectory === 'downward_sweep') {
-      deltaY = 16;
-      deltaX = 14;
-      rotateDeg = -8;
+      deltaY = 10;
+      deltaX = 6;
+      rotateDeg = -4;
     } else if (trajectory === 'outward_arc') {
-      deltaX = 22;
-      deltaY = -6;
-      rotateDeg = 16;
+      deltaX = 12;
+      deltaY = -4;
+      rotateDeg = 8;
     }
   }
 
-  // Format clean compact display label (e.g. "Sign: SALAM / HELLO" or "Sign: SHUKRIYA")
-  const rawPsl = reference.pslLabel.split('(')[0].trim();
-  const labelText = `Sign: ${rawPsl}`;
+  // Format concise short label (e.g. "Reply: HELLO", "Reply: THANK YOU", "Reply: HERE YOU GO")
+  const shortLabel = getReplyShortLabel(reply);
 
   return (
     <aside
-      className="absolute bottom-2.5 right-2.5 sm:bottom-3.5 sm:right-3.5 z-30 pointer-events-none flex flex-col items-end gap-1 select-none animate-in fade-in duration-200"
+      className="absolute left-1/2 top-[36%] -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center gap-1.5 select-none transition-all duration-300 ease-out animate-in fade-in"
       aria-label="Translucent Pakistan Sign Language guide overlay"
     >
-      {/* 1. Translucent Grayscale Ghost Hand Silhouette */}
-      <div className="relative w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center">
+      {/* 1. Translucent Grayscale Ghost Hand Demonstration */}
+      <div className="relative w-20 h-20 sm:w-22 sm:h-22 flex items-center justify-center">
         <div
           className="relative transition-transform ease-out pointer-events-none"
           style={{
-            transform: `translate(${deltaX}px, ${deltaY}px) rotate(${rotateDeg}deg) scale(${scale})`,
+            transform: `translate(${deltaX}px, ${deltaY}px) rotate(${rotateDeg}deg)`,
             transitionDuration: '50ms',
-            filter: 'drop-shadow(0 3px 8px rgba(0, 0, 0, 0.55))',
+            filter: 'drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35))',
           }}
         >
           <GhostHandSvg handPose={currentStep?.handPose || 'open_palm_forward'} />
         </div>
       </div>
 
-      {/* 2. Single Compact Pill Label */}
-      <div className="pointer-events-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-950/80 backdrop-blur-md border border-white/15 text-white shadow-lg">
+      {/* 2. One Tiny Understated Label Directly Below */}
+      <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900/65 backdrop-blur-md border border-white/10 shadow-sm text-slate-100">
         <span
           className="w-1.5 h-1.5 rounded-full bg-[#068D9D] shrink-0"
           aria-hidden="true"
         />
-        <span className="text-[11px] font-bold tracking-tight text-white uppercase whitespace-nowrap">
-          {labelText}
+        <span className="text-[11px] font-semibold tracking-wide text-white whitespace-nowrap">
+          Reply: {shortLabel}
         </span>
-
-        {/* Minimal Replay Trigger */}
-        <button
-          onClick={handleReplay}
-          className="p-1 -mr-0.5 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
-          title="Replay demonstration"
-          aria-label="Replay sign demonstration"
-        >
-          <RotateCcw className="w-2.5 h-2.5" />
-        </button>
-
-        {/* Minimal Dismiss Trigger */}
-        <button
-          onClick={onClose}
-          className="p-1 -mr-1 rounded-full text-slate-400 hover:text-rose-400 hover:bg-white/10 transition-colors"
-          title="Dismiss guide"
-          aria-label="Dismiss sign guide"
-        >
-          <X className="w-2.5 h-2.5" />
-        </button>
       </div>
     </aside>
   );
 }
 
 /**
+ * Extracts a concise, clean uppercase label for the single reply badge.
+ */
+function getReplyShortLabel(reply: SuggestedReply): string {
+  const id = reply.referenceId || reply.reference?.id || reply.id || '';
+  if (id.includes('hello')) return 'HELLO';
+  if (id.includes('thank_you') || id.includes('thanks')) return 'THANK YOU';
+  if (id.includes('here_you_go')) return 'HERE YOU GO';
+  if (id.includes('here_to_help') || id.includes('help')) return 'HELP';
+  if (id.includes('understood')) return 'UNDERSTOOD';
+  if (id.includes('welcome')) return 'WELCOME';
+  if (id.includes('please_wait') || id.includes('wait')) return 'WAIT';
+  if (id.includes('repeat')) return 'REPEAT';
+  if (id.includes('anything_else') || id.includes('more')) return 'MORE';
+  if (id.includes('what_do_you_need') || id.includes('need')) return 'WHAT NEED';
+
+  if (reply.reference?.pslLabel) {
+    return reply.reference.pslLabel.split(/[\/(]/)[0].trim().toUpperCase();
+  }
+  return reply.text.replace(/^[“"']|[”"'.!?]$/g, '').trim().toUpperCase();
+}
+
+/**
  * Natural Translucent Grayscale Hand Silhouette SVGs
- * Anatomically proportioned palm and finger contours in translucent slate-gray
- * with soft natural highlights and inner creases (no wireframe landmark dots).
+ * Anatomically proportioned palm and finger contours in soft neutral gray
+ * with 45–50% opacity and subtle contrast contours (no wireframe landmark dots).
  */
 function GhostHandSvg({
   handPose,
 }: {
   handPose: SignMotionStep['handPose'];
 }) {
-  const fill = 'rgba(218, 226, 236, 0.45)';
-  const stroke = 'rgba(248, 250, 252, 0.9)';
-  const creaseStroke = 'rgba(148, 163, 184, 0.55)';
-  const shadowFill = 'rgba(100, 116, 139, 0.25)';
+  const fill = 'rgba(226, 232, 240, 0.48)';
+  const stroke = 'rgba(255, 255, 255, 0.7)';
+  const creaseStroke = 'rgba(148, 163, 184, 0.5)';
 
   // Pose A: Two-handed support sign (Dominant fist atop flat non-dominant palm base - Madad / Help)
   if (handPose === 'dominant_fist_on_palm') {
     return (
       <svg
-        width="96"
-        height="96"
-        viewBox="0 0 100 100"
+        width="86"
+        height="86"
+        viewBox="0 0 90 90"
         className="overflow-visible"
         aria-hidden="true"
       >
         {/* Flat non-dominant supporting palm base */}
         <path
-          d="M 12 76 C 12 72 25 70 50 70 C 75 70 88 72 88 76 C 88 82 75 84 50 84 C 25 84 12 82 12 76 Z"
+          d="M 12 68 C 12 64 24 62 45 62 C 66 62 78 64 78 68 C 78 73 66 75 45 75 C 24 75 12 73 12 68 Z"
           fill={fill}
           stroke={stroke}
-          strokeWidth="1.6"
+          strokeWidth="1.3"
         />
-        <line x1="20" y1="76" x2="80" y2="76" stroke={creaseStroke} strokeWidth="1.2" />
+        <line x1="18" y1="68" x2="72" y2="68" stroke={creaseStroke} strokeWidth="1" />
 
         {/* Dominant closed fist resting atop base palm */}
         <rect
-          x="34"
-          y="36"
-          width="32"
-          height="32"
-          rx="9"
+          x="30"
+          y="32"
+          width="28"
+          height="28"
+          rx="8"
           fill={fill}
           stroke={stroke}
-          strokeWidth="1.8"
+          strokeWidth="1.4"
         />
         {/* Thumb pointing upright */}
         <path
-          d="M 38 42 C 36 24 40 18 45 18 C 50 18 51 25 48 38"
+          d="M 34 38 C 32 22 36 17 40 17 C 44 17 45 23 43 34"
           fill={fill}
           stroke={stroke}
-          strokeWidth="1.6"
+          strokeWidth="1.3"
         />
-        {/* Curled finger knuckle creases */}
-        <line x1="42" y1="46" x2="60" y2="46" stroke={creaseStroke} strokeWidth="1.2" />
-        <line x1="42" y1="54" x2="60" y2="54" stroke={creaseStroke} strokeWidth="1.2" />
-        <line x1="42" y1="62" x2="60" y2="62" stroke={creaseStroke} strokeWidth="1.2" />
+        {/* Knuckle creases */}
+        <line x1="37" y1="41" x2="52" y2="41" stroke={creaseStroke} strokeWidth="1" />
+        <line x1="37" y1="48" x2="52" y2="48" stroke={creaseStroke} strokeWidth="1" />
+        <line x1="37" y1="54" x2="52" y2="54" stroke={creaseStroke} strokeWidth="1" />
       </svg>
     );
   }
 
-  // Pose B: Index finger pointing to temple (Samjh gaya / Comprehension)
+  // Pose B: Index finger pointing to temple (Samjh gaya / Understood)
   if (handPose === 'point_temple') {
     return (
       <svg
-        width="88"
-        height="96"
-        viewBox="0 0 90 100"
+        width="80"
+        height="86"
+        viewBox="0 0 85 90"
         className="overflow-visible"
         aria-hidden="true"
       >
         {/* Curled palm base */}
         <path
-          d="M 32 94 C 20 86 22 72 24 60 C 26 50 34 48 42 48 C 58 48 68 56 66 74 C 64 88 50 94 32 94 Z"
+          d="M 30 84 C 18 78 20 65 22 54 C 24 45 32 43 38 43 C 52 43 62 50 60 66 C 58 78 46 84 30 84 Z"
           fill={fill}
           stroke={stroke}
-          strokeWidth="1.6"
+          strokeWidth="1.3"
         />
         {/* Extended Index Finger */}
         <path
-          d="M 34 52 C 34 32 35 14 40 12 C 45 12 46 30 46 52"
+          d="M 32 46 C 32 28 33 13 37 11 C 41 11 42 26 42 46"
           fill={fill}
           stroke={stroke}
-          strokeWidth="1.8"
+          strokeWidth="1.4"
         />
-        {/* Joint creases on index finger */}
-        <line x1="36" y1="36" x2="44" y2="36" stroke={creaseStroke} strokeWidth="1" />
-        <line x1="36" y1="24" x2="44" y2="24" stroke={creaseStroke} strokeWidth="1" />
-
-        {/* Curled Middle, Ring, Pinky knuckle ridges */}
-        <path d="M 46 54 C 54 52 58 56 58 60" fill="none" stroke={stroke} strokeWidth="1.4" />
-        <path d="M 46 62 C 54 60 58 64 58 68" fill="none" stroke={stroke} strokeWidth="1.4" />
-        <path d="M 46 70 C 52 68 56 72 56 76" fill="none" stroke={stroke} strokeWidth="1.4" />
-
-        {/* Curled thumb over knuckles */}
-        <path
-          d="M 28 66 C 24 58 28 52 38 54"
-          fill="none"
-          stroke={stroke}
-          strokeWidth="1.6"
-        />
+        {/* Knuckle lines on curled fingers */}
+        <path d="M 42 48 C 48 46 52 50 52 53" fill="none" stroke={stroke} strokeWidth="1.2" />
+        <path d="M 42 55 C 48 53 52 57 52 60" fill="none" stroke={stroke} strokeWidth="1.2" />
+        <path d="M 42 62 C 47 60 50 64 50 67" fill="none" stroke={stroke} strokeWidth="1.2" />
+        <path d="M 26 59 C 22 52 26 47 34 49" fill="none" stroke={stroke} strokeWidth="1.3" />
       </svg>
     );
   }
@@ -300,69 +275,44 @@ function GhostHandSvg({
   if (handPose === 'salam_temple') {
     return (
       <svg
-        width="92"
-        height="96"
-        viewBox="0 0 100 100"
+        width="82"
+        height="86"
+        viewBox="0 0 90 90"
         className="overflow-visible"
         aria-hidden="true"
       >
-        {/* Natural tilted open hand silhouette */}
         <path
-          d="M 52 96 C 36 94 33 82 34 72 C 34 62 28 56 22 50 C 18 46 20 40 25 40 C 31 40 35 44 38 52 C 39 38 41 18 46 15 C 50 12 54 15 54 25 C 56 34 56 46 56 46 C 58 35 60 12 65 10 C 69 8 72 12 72 24 C 72 36 72 46 72 46 C 74 36 76 16 80 15 C 84 14 86 18 86 28 C 86 42 84 50 84 50 C 86 42 88 28 92 27 C 96 26 98 30 97 38 C 95 56 90 74 84 82 C 76 92 64 96 52 96 Z"
+          d="M 46 86 C 32 84 30 74 30 65 C 30 56 25 50 20 45 C 16 41 18 36 22 36 C 27 36 31 40 34 47 C 35 34 37 16 41 13 C 45 10 48 13 48 22 C 50 30 50 41 50 41 C 52 31 54 11 58 9 C 62 7 64 11 64 21 L 64 41 C 66 32 68 14 71 13 C 75 12 77 16 77 25 L 77 44 C 79 37 81 25 84 24 C 88 23 89 27 88 34 C 86 50 82 66 76 74 C 68 83 57 86 46 86 Z"
           fill={fill}
           stroke={stroke}
-          strokeWidth="1.6"
+          strokeWidth="1.3"
           strokeLinejoin="round"
         />
-        {/* Subtle palm lifelines */}
-        <path
-          d="M 42 60 C 50 68 62 70 76 66"
-          fill="none"
-          stroke={creaseStroke}
-          strokeWidth="1.2"
-        />
-        <path
-          d="M 44 72 C 54 78 66 78 72 74"
-          fill="none"
-          stroke={creaseStroke}
-          strokeWidth="1.2"
-        />
+        <path d="M 38 54 C 45 61 55 63 68 59" fill="none" stroke={creaseStroke} strokeWidth="1" />
+        <path d="M 40 65 C 48 70 58 70 64 66" fill="none" stroke={creaseStroke} strokeWidth="1" />
       </svg>
     );
   }
 
-  // Pose D: Open palm facing upward (Offering / Here you go / Welcome)
+  // Pose D: Open palm facing upward (Offering / Here you go / Take)
   if (handPose === 'open_palms_up') {
     return (
       <svg
-        width="96"
-        height="96"
-        viewBox="0 0 100 100"
+        width="84"
+        height="86"
+        viewBox="0 0 90 90"
         className="overflow-visible"
         aria-hidden="true"
       >
-        {/* Foreshortened palm cup facing upward */}
         <path
-          d="M 32 92 C 18 85 16 68 20 54 C 22 46 28 42 34 46 C 36 34 42 26 48 26 C 54 26 56 32 58 42 C 60 30 66 24 72 24 C 78 24 80 32 80 44 C 82 34 88 30 92 32 C 96 34 96 44 92 56 C 86 74 76 90 48 92 Z"
+          d="M 28 82 C 16 76 14 61 18 48 C 20 41 25 37 30 41 C 32 30 37 23 43 23 C 48 23 50 28 52 37 C 54 26 59 21 64 21 C 70 21 71 28 71 39 C 73 30 78 27 82 28 C 85 30 85 39 82 50 C 76 66 68 80 43 82 Z"
           fill={fill}
           stroke={stroke}
-          strokeWidth="1.6"
+          strokeWidth="1.3"
           strokeLinejoin="round"
         />
-        {/* Palm cup shading */}
-        <path
-          d="M 32 64 C 44 72 62 72 76 60"
-          fill="none"
-          stroke={creaseStroke}
-          strokeWidth="1.3"
-        />
-        {/* Thumb projecting outward */}
-        <path
-          d="M 22 56 C 14 50 12 40 18 36 C 24 32 28 40 32 48"
-          fill={fill}
-          stroke={stroke}
-          strokeWidth="1.4"
-        />
+        <path d="M 28 57 C 39 64 55 64 68 53" fill="none" stroke={creaseStroke} strokeWidth="1.1" />
+        <path d="M 20 50 C 13 45 11 36 16 32 C 21 28 25 35 28 43" fill={fill} stroke={stroke} strokeWidth="1.2" />
       </svg>
     );
   }
@@ -371,27 +321,20 @@ function GhostHandSvg({
   if (handPose === 'flat_hand_chest') {
     return (
       <svg
-        width="92"
-        height="96"
-        viewBox="0 0 100 100"
+        width="82"
+        height="86"
+        viewBox="0 0 90 90"
         className="overflow-visible"
         aria-hidden="true"
       >
-        {/* Hand resting flat inward */}
         <path
-          d="M 46 95 C 32 92 28 80 30 70 C 32 60 26 54 20 48 C 16 44 18 38 23 38 C 29 38 33 42 36 50 C 37 36 38 16 42 14 C 46 12 50 14 50 24 L 50 48 C 52 36 54 10 58 8 C 62 6 65 10 65 22 L 65 48 C 66 38 68 14 72 12 C 76 10 79 14 79 26 L 79 50 C 80 42 82 22 86 20 C 90 18 93 22 92 32 C 91 46 88 64 84 74 C 76 86 64 94 46 95 Z"
+          d="M 42 85 C 29 82 25 72 27 63 C 29 54 23 48 18 43 C 14 39 16 34 20 34 C 26 34 29 38 32 45 C 33 32 34 14 38 12 C 41 10 45 12 45 21 L 45 43 C 47 32 49 9 52 7 C 56 5 58 9 58 20 L 58 43 C 59 34 61 12 65 10 C 68 9 71 12 71 23 L 71 45 C 72 38 74 20 77 18 C 81 16 83 20 83 29 C 82 41 79 57 75 66 C 68 77 58 84 42 85 Z"
           fill={fill}
           stroke={stroke}
-          strokeWidth="1.6"
+          strokeWidth="1.3"
           strokeLinejoin="round"
         />
-        {/* Natural palm creases */}
-        <path
-          d="M 40 62 C 50 70 65 70 76 64"
-          fill="none"
-          stroke={creaseStroke}
-          strokeWidth="1.2"
-        />
+        <path d="M 36 55 C 45 62 58 62 68 57" fill="none" stroke={creaseStroke} strokeWidth="1" />
       </svg>
     );
   }
@@ -400,26 +343,20 @@ function GhostHandSvg({
   if (handPose === 'curved_hands_flex') {
     return (
       <svg
-        width="90"
-        height="96"
-        viewBox="0 0 100 100"
+        width="80"
+        height="86"
+        viewBox="0 0 90 90"
         className="overflow-visible"
         aria-hidden="true"
       >
-        {/* Cupped curving fingers */}
         <path
-          d="M 42 94 C 28 88 26 74 28 62 C 30 52 24 46 18 42 C 14 38 16 34 22 34 C 28 34 32 38 34 46 C 36 36 40 22 46 22 C 52 22 52 30 50 40 C 54 30 58 20 64 20 C 70 20 70 28 68 38 C 72 28 76 22 82 22 C 86 22 86 30 84 40 C 86 34 90 28 94 30 C 98 32 96 42 92 52 C 86 70 76 88 42 94 Z"
+          d="M 38 84 C 25 79 23 66 25 55 C 27 46 21 41 16 37 C 12 34 14 30 19 30 C 25 30 28 34 30 41 C 32 32 36 19 41 19 C 46 19 46 27 45 36 C 48 27 52 18 57 18 C 62 18 62 25 61 34 C 64 25 68 20 73 20 C 77 20 77 27 75 36 C 77 30 81 25 84 27 C 88 28 86 37 82 46 C 77 62 68 78 38 84 Z"
           fill={fill}
           stroke={stroke}
-          strokeWidth="1.6"
+          strokeWidth="1.3"
           strokeLinejoin="round"
         />
-        <path
-          d="M 36 60 C 46 66 62 66 74 58"
-          fill="none"
-          stroke={creaseStroke}
-          strokeWidth="1.2"
-        />
+        <path d="M 32 54 C 41 59 55 59 66 52" fill="none" stroke={creaseStroke} strokeWidth="1" />
       </svg>
     );
   }
@@ -427,33 +364,21 @@ function GhostHandSvg({
   // Default Standard Pose: Open Palm Forward (Fingers upright, flat hand toward partner)
   return (
     <svg
-      width="92"
-      height="96"
-      viewBox="0 0 100 100"
+      width="82"
+      height="86"
+      viewBox="0 0 90 90"
       className="overflow-visible"
       aria-hidden="true"
     >
-      {/* Natural open palm forward silhouette */}
       <path
-        d="M 46 96 C 30 94 28 82 28 72 C 28 62 22 55 16 49 C 12 45 14 39 19 39 C 25 39 29 43 32 52 C 33 37 34 16 38 14 C 42 11 46 14 46 24 L 46 48 C 48 36 50 9 54 7 C 58 5 61 9 61 21 L 61 48 C 62 38 64 13 68 11 C 72 9 75 13 75 25 L 75 50 C 76 42 78 22 82 20 C 86 18 89 22 88 32 C 87 46 85 64 82 74 C 76 86 64 94 46 96 Z"
+        d="M 42 86 C 27 84 25 73 25 64 C 25 55 20 49 14 44 C 11 40 12 35 17 35 C 22 35 26 39 29 47 C 30 33 31 14 34 12 C 38 10 41 12 41 21 L 41 43 C 43 32 45 8 48 6 C 52 4 55 8 55 19 L 55 43 C 56 34 58 11 61 10 C 65 8 67 11 67 22 L 67 45 C 68 38 70 20 73 18 C 77 16 80 20 79 28 C 78 41 76 57 73 66 C 68 77 57 84 42 86 Z"
         fill={fill}
         stroke={stroke}
-        strokeWidth="1.6"
+        strokeWidth="1.3"
         strokeLinejoin="round"
       />
-      {/* Palm lifeline contours */}
-      <path
-        d="M 36 60 C 46 68 62 68 74 62"
-        fill="none"
-        stroke={creaseStroke}
-        strokeWidth="1.2"
-      />
-      <path
-        d="M 38 72 C 48 78 60 78 70 72"
-        fill="none"
-        stroke={creaseStroke}
-        strokeWidth="1.1"
-      />
+      <path d="M 32 54 C 41 61 55 61 66 55" fill="none" stroke={creaseStroke} strokeWidth="1" />
+      <path d="M 34 64 C 43 70 54 70 63 64" fill="none" stroke={creaseStroke} strokeWidth="1" />
     </svg>
   );
 }
