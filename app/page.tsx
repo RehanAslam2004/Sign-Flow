@@ -1,15 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Volume2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Volume2 } from 'lucide-react';
 import LandingSurface from '@/components/LandingSurface';
 import CameraViewport from '@/components/CameraViewport';
 import RecognitionStatus from '@/components/RecognitionStatus';
 import TranscriptView from '@/components/TranscriptView';
 import SessionControlBar from '@/components/SessionControlBar';
 import ErrorBanner from '@/components/ErrorBanner';
-import SuggestedReplies from '@/components/SuggestedReplies';
-import SignReferenceModal from '@/components/SignReferenceModal';
 import GhostHandGuide from '@/components/GhostHandGuide';
 
 import { UsageMode, ConversationMessage, SuggestedReply } from '@/types/app';
@@ -19,6 +17,7 @@ import { SignFlowWebSocketClient, ConnectionStatus } from '@/lib/websocketClient
 import { RecognitionStateMachine } from '@/lib/stateMachine';
 import { speechEngine } from '@/lib/speech';
 import { CONFIG } from '@/lib/config';
+import { getSuggestedRepliesForText } from '@/lib/replyCatalogue';
 
 export default function SignFlowHome() {
   const [mode, setMode] = useState<UsageMode>(null);
@@ -35,12 +34,8 @@ export default function SignFlowHome() {
   const [activeUtterance, setActiveUtterance] = useState<string[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
 
-  // Suggested Sign Replies state (strictly for 'partner' mode)
-  const [suggestions, setSuggestions] = useState<SuggestedReply[]>([]);
-  const [suggestionsLoading, setSuggestionsLoading] = useState<boolean>(false);
-  const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  // Suggested Sign Reply state (exclusively active for 'partner' mode)
   const [activeGhostHandReply, setActiveGhostHandReply] = useState<SuggestedReply | null>(null);
-  const [selectedReplyForModal, setSelectedReplyForModal] = useState<SuggestedReply | null>(null);
 
   // Refs for loop & services
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
@@ -54,102 +49,17 @@ export default function SignFlowHome() {
 
   // Mode and deduplication refs
   const modeRef = useRef<UsageMode>(mode);
-  const abortControllerRef = useRef<AbortController | null>(null);
-  const lastSuggestedMessageIdRef = useRef<string | null>(null);
-  const latestMessageIdRef = useRef<string | null>(null);
+  const lastHandledPhraseRef = useRef<string | null>(null);
 
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
 
-  // Clean suggestion state on reset or mode change
+  // Clean suggestion and guide state on reset, end, or mode change
   const clearSuggestedRepliesState = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-    }
-    setSuggestions([]);
     setActiveGhostHandReply(null);
-    setSelectedReplyForModal(null);
-    setSuggestionsLoading(false);
-    setSuggestionsError(null);
-    lastSuggestedMessageIdRef.current = null;
-    latestMessageIdRef.current = null;
+    lastHandledPhraseRef.current = null;
   }, []);
-
-  // Handle selecting a suggested reply to coach in camera view
-  const handleSelectReply = (reply: SuggestedReply) => {
-    setActiveGhostHandReply((prev) => (prev?.id === reply.id ? null : reply));
-  };
-
-  // Fetch suggested replies (strictly for partner mode)
-  const fetchSuggestedReplies = useCallback(
-    async (message: ConversationMessage) => {
-      // Strict Mode Guard: Never query or show in 'signing' mode
-      if (modeRef.current !== 'partner') {
-        return;
-      }
-
-      if (!message || !message.text || !message.text.trim()) {
-        return;
-      }
-
-      // Deduplication: suppress duplicate triggers for the same message ID
-      if (lastSuggestedMessageIdRef.current === message.id) {
-        return;
-      }
-
-      lastSuggestedMessageIdRef.current = message.id;
-      latestMessageIdRef.current = message.id;
-
-      // Abort prior in-flight request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-
-      setSuggestionsLoading(true);
-      setSuggestionsError(null);
-
-      try {
-        const res = await fetch('/api/suggest-replies', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mode: 'partner',
-            messageId: message.id,
-            text: message.text,
-          }),
-          signal: controller.signal,
-        });
-
-        if (!res.ok) {
-          if (res.status === 403) {
-            setSuggestions([]);
-            return;
-          }
-          throw new Error(`Failed to fetch suggestions (${res.status})`);
-        }
-
-        const data = await res.json();
-
-        // Stale response protection
-        if (latestMessageIdRef.current === data.messageId && modeRef.current === 'partner') {
-          setSuggestions(data.suggestions || []);
-        }
-      } catch (err: any) {
-        if (err.name === 'AbortError') return;
-        console.warn('Suggested replies request warning:', err);
-        setSuggestionsError('Suggestions are temporarily unavailable.');
-      } finally {
-        if (latestMessageIdRef.current === message.id) {
-          setSuggestionsLoading(false);
-        }
-      }
-    },
-    []
-  );
 
   // Handle Mode Selection and set appropriate default camera
   const handleSelectMode = (selectedMode: 'signing' | 'partner') => {
@@ -189,9 +99,22 @@ export default function SignFlowHome() {
           speechEngine.speak(phrase);
         }
 
-        // Suggested sign replies exclusively for partner mode
+        // Automatic AR Ghost Hand Guide: strictly for 'partner' mode
         if (modeRef.current === 'partner') {
-          fetchSuggestedReplies(newMessage);
+          // Avoid re-triggering or restarting animation on identical duplicate phrase
+          if (lastHandledPhraseRef.current !== phrase) {
+            lastHandledPhraseRef.current = phrase;
+            const replies = getSuggestedRepliesForText(phrase);
+            // Automatically select best contextually appropriate verified reply
+            if (replies.length > 0 && replies[0].reference) {
+              setActiveGhostHandReply(replies[0]);
+            } else {
+              setActiveGhostHandReply(null);
+            }
+          }
+        } else {
+          // In 'signing' mode, strictly ensure no guide is active
+          setActiveGhostHandReply(null);
         }
       },
       onStatusChange: (text) => {
@@ -202,7 +125,7 @@ export default function SignFlowHome() {
     return () => {
       stateMachineRef.current?.reset();
     };
-  }, [autoSpeechEnabled, fetchSuggestedReplies]);
+  }, [autoSpeechEnabled]);
 
   // 2. Initialize MediaPipe & WebSocket when in active mode
   useEffect(() => {
@@ -402,13 +325,12 @@ export default function SignFlowHome() {
                   facingMode={facingMode}
                   onToggleFacingMode={handleToggleFacingMode}
                 >
-                  {/* AR Translucent Ghost-Hand Guide (strictly for partner mode) */}
+                  {/* AR Translucent Ghost-Hand Guide (strictly automatic in partner mode) */}
                   {mode === 'partner' && activeGhostHandReply && (
                     <GhostHandGuide
                       reply={activeGhostHandReply}
                       mode={mode}
                       onClose={() => setActiveGhostHandReply(null)}
-                      onOpenDetails={() => setSelectedReplyForModal(activeGhostHandReply)}
                     />
                   )}
                 </CameraViewport>
@@ -498,21 +420,8 @@ export default function SignFlowHome() {
                   />
                 </div>
 
-                {/* Suggested Sign Replies (Strictly Partner Mode) */}
-                {mode === 'partner' && (
-                  <SuggestedReplies
-                    mode={mode}
-                    suggestions={suggestions}
-                    isLoading={suggestionsLoading}
-                    error={suggestionsError}
-                    activeReplyId={activeGhostHandReply?.id}
-                    onSelectReply={handleSelectReply}
-                    latestIncomingText={messages.length > 0 ? messages[0].text : undefined}
-                  />
-                )}
-
                 {/* Conversation Transcript Card */}
-                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-sm flex-1 min-h-[240px] sm:min-h-[280px]">
+                <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-sm flex-1 min-h-[260px] sm:min-h-[320px]">
                   <TranscriptView
                     messages={messages}
                     onReplay={(text) => speechEngine.speak(text)}
@@ -521,14 +430,6 @@ export default function SignFlowHome() {
               </div>
             </div>
           </div>
-        )}
-
-        {/* Verified Sign Reference Detail Modal */}
-        {selectedReplyForModal && (
-          <SignReferenceModal
-            reply={selectedReplyForModal}
-            onClose={() => setSelectedReplyForModal(null)}
-          />
         )}
       </main>
     </div>

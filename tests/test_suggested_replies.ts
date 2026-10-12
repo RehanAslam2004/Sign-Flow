@@ -110,6 +110,27 @@ async function runTests() {
   }
   console.log('✓ Passed: All catalogue entries provide validated multi-step ghost-hand motion trajectories.');
 
+  // Test 9: Automatic Top Reply Selection for AR Ghost Hand
+  console.log('Test 9: Automatic top reply selection for AR Ghost Hand...');
+  const testPhrases = ['HELLO', 'WATER', 'HELP', 'THANK_YOU'];
+  for (const phrase of testPhrases) {
+    const replies = getSuggestedRepliesForText(phrase);
+    assert.ok(replies.length > 0, `Expected replies for ${phrase}`);
+    const topReply = replies[0];
+    assert.ok(topReply.reference, `Top reply for ${phrase} must contain a verified reference entry`);
+    assert.ok(topReply.reference.pslLabel, `Top reply reference must contain pslLabel`);
+    assert.ok(topReply.reference.motionSteps && topReply.reference.motionSteps.length > 0, `Top reply reference must contain motionSteps`);
+  }
+  console.log('✓ Passed: Top reply for confirmed messages reliably produces verified ghost-hand references.');
+
+  // Test 10: Deduplication & Stability
+  console.log('Test 10: Output stability for identical confirmed phrases...');
+  const runA = getSuggestedRepliesForText('HELLO');
+  const runB = getSuggestedRepliesForText('HELLO');
+  assert.strictEqual(runA[0].id, runB[0].id, 'Top suggestion must remain deterministic');
+  assert.strictEqual(runA[0].reference?.pslLabel, runB[0].reference?.pslLabel, 'Sign label must be stable');
+  console.log('✓ Passed: Suggestion matching is deterministic and stable.');
+
   console.log('--- All Suggested Sign Replies Tests Passed Successfully! ---');
 }
 
