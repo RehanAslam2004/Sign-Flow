@@ -10,6 +10,7 @@ import SessionControlBar from '@/components/SessionControlBar';
 import ErrorBanner from '@/components/ErrorBanner';
 import SuggestedReplies from '@/components/SuggestedReplies';
 import SignReferenceModal from '@/components/SignReferenceModal';
+import GhostHandGuide from '@/components/GhostHandGuide';
 
 import { UsageMode, ConversationMessage, SuggestedReply } from '@/types/app';
 import { FramePayload } from '@/types/contract';
@@ -38,6 +39,7 @@ export default function SignFlowHome() {
   const [suggestions, setSuggestions] = useState<SuggestedReply[]>([]);
   const [suggestionsLoading, setSuggestionsLoading] = useState<boolean>(false);
   const [suggestionsError, setSuggestionsError] = useState<string | null>(null);
+  const [activeGhostHandReply, setActiveGhostHandReply] = useState<SuggestedReply | null>(null);
   const [selectedReplyForModal, setSelectedReplyForModal] = useState<SuggestedReply | null>(null);
 
   // Refs for loop & services
@@ -67,12 +69,18 @@ export default function SignFlowHome() {
       abortControllerRef.current = null;
     }
     setSuggestions([]);
+    setActiveGhostHandReply(null);
     setSelectedReplyForModal(null);
     setSuggestionsLoading(false);
     setSuggestionsError(null);
     lastSuggestedMessageIdRef.current = null;
     latestMessageIdRef.current = null;
   }, []);
+
+  // Handle selecting a suggested reply to coach in camera view
+  const handleSelectReply = (reply: SuggestedReply) => {
+    setActiveGhostHandReply((prev) => (prev?.id === reply.id ? null : reply));
+  };
 
   // Fetch suggested replies (strictly for partner mode)
   const fetchSuggestedReplies = useCallback(
@@ -393,7 +401,17 @@ export default function SignFlowHome() {
                   handsDetected={handsDetected}
                   facingMode={facingMode}
                   onToggleFacingMode={handleToggleFacingMode}
-                />
+                >
+                  {/* AR Translucent Ghost-Hand Guide (strictly for partner mode) */}
+                  {mode === 'partner' && activeGhostHandReply && (
+                    <GhostHandGuide
+                      reply={activeGhostHandReply}
+                      mode={mode}
+                      onClose={() => setActiveGhostHandReply(null)}
+                      onOpenDetails={() => setSelectedReplyForModal(activeGhostHandReply)}
+                    />
+                  )}
+                </CameraViewport>
 
                 {/* Session Control Toolbar directly beneath camera on desktop */}
                 <div className="hidden lg:block">
@@ -487,7 +505,8 @@ export default function SignFlowHome() {
                     suggestions={suggestions}
                     isLoading={suggestionsLoading}
                     error={suggestionsError}
-                    onSelectReply={(reply) => setSelectedReplyForModal(reply)}
+                    activeReplyId={activeGhostHandReply?.id}
+                    onSelectReply={handleSelectReply}
                     latestIncomingText={messages.length > 0 ? messages[0].text : undefined}
                   />
                 )}

@@ -93,3 +93,4 @@ Activity mode: [to be recorded upon completion]
 ## Revisions
 
 - **Scope Extension (Suggested Sign Replies):** Added Slice 6 to implement contextual suggested responses for hearing conversation partners in "Someone with me is signing" mode. Strictly restricted from "I'm the one signing" mode. Leverages a verified PSL catalogue with truthful pending-verification disclaimers where visual media is not yet available, ensuring zero hallucinated hand shapes.
+- **Ghost-Hand Camera Integration (Refinement to Slice 6):** Refined Suggested Sign Replies from a separate text reference section into an in-camera AR-style translucent ghost-hand guide. Positioned in an unobtrusive lower region of the camera viewport, the guide demonstrates authentic multi-step PSL motions with play/pause, replay, and step controls, while keeping the live conversation video feed active.

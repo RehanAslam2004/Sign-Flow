@@ -1,6 +1,6 @@
 import assert from 'node:assert';
-import { getSuggestedRepliesForText, PSL_REFERENCE_CATALOGUE } from '../lib/replyCatalogue.ts';
-import { POST } from '../app/api/suggest-replies/route.ts';
+import { getSuggestedRepliesForText, PSL_REFERENCE_CATALOGUE } from '../lib/replyCatalogue';
+import { POST } from '../app/api/suggest-replies/route';
 
 async function runTests() {
   console.log('--- Starting Suggested Sign Replies Test Suite ---');
@@ -93,6 +93,22 @@ async function runTests() {
     }
   }
   console.log(`✓ Passed: All ${PSL_REFERENCE_CATALOGUE.length} catalogue entries verified for truthfulness and provenance.`);
+
+  // Test 8: Ghost-Hand Motion Steps Verification
+  console.log('Test 8: Ghost-hand motion steps & trajectory data...');
+  for (const entry of PSL_REFERENCE_CATALOGUE) {
+    assert.ok(entry.motionSteps, `Entry ${entry.id} must define motionSteps`);
+    assert.ok(entry.motionSteps.length >= 1, `Entry ${entry.id} must have at least 1 motion step`);
+    for (const step of entry.motionSteps) {
+      assert.ok(step.stepNumber >= 1, 'stepNumber must be >= 1');
+      assert.strictEqual(step.totalSteps, entry.motionSteps.length, 'totalSteps must match step count');
+      assert.ok(step.label, 'step must have a label');
+      assert.ok(step.instruction, 'step must have an instruction');
+      assert.ok(step.handPose, 'step must define a handPose');
+      assert.ok(step.motionTrajectory, 'step must define a motionTrajectory');
+    }
+  }
+  console.log('✓ Passed: All catalogue entries provide validated multi-step ghost-hand motion trajectories.');
 
   console.log('--- All Suggested Sign Replies Tests Passed Successfully! ---');
 }

@@ -12,6 +12,7 @@ interface CameraViewportProps {
   handsDetected?: boolean;
   facingMode?: 'user' | 'environment';
   onToggleFacingMode?: () => void;
+  children?: React.ReactNode;
 }
 
 export default function CameraViewport({
@@ -22,6 +23,7 @@ export default function CameraViewport({
   handsDetected = false,
   facingMode: externalFacingMode,
   onToggleFacingMode,
+  children,
 }: CameraViewportProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -210,6 +212,9 @@ export default function CameraViewport({
           </button>
         </div>
       )}
+
+      {/* AR Overlays (e.g. Ghost Hand Guide) */}
+      {children}
     </div>
   );
 }

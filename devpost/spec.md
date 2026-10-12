@@ -298,6 +298,7 @@ Sign flow/
 │   ├── RecognitionStatus.tsx   # Live status pill (Recognizing, Confirmed, Idle)
 │   ├── TranscriptView.tsx      # Running conversation list with replay buttons
 │   ├── SuggestedReplies.tsx    # Suggested responses section (exclusively partner mode)
+│   ├── GhostHandGuide.tsx      # AR translucent in-camera ghost-hand motion guide
 │   ├── SignReferenceModal.tsx  # Detailed PSL sign reference and learning viewer
 │   ├── SessionControlBar.tsx   # Switch camera, End, Clear, Change mode toolbar
 │   └── ErrorBanner.tsx         # Permission denied, camera disconnect, backend offline

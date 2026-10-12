@@ -91,9 +91,10 @@ Source: `scope.md > The Unique Kernel` and `scope.md > Who It's For`.
 - **Strict Mode Gating:** Active ONLY when `mode === 'partner'` ("Someone with me is signing"). Never rendered, triggered, or queried in "I'm the one signing" mode.
 - **Trigger & Deduplication:** Triggers exclusively on newly committed transcript messages. Live fluctuating predictions or identical repeated messages do not fire repeat requests.
 - **Contextual Suggestions:** Presents 2–4 concise, contextually relevant response options (e.g., offering help, confirming understanding, asking for clarification).
-- **Verified PSL Reference Detail:** Selecting a reply opens a mobile-friendly detail view showing the full response, intended meaning, step-by-step signing instructions, and visual demonstrations if available.
-- **Truthful Validation Status:** When visual assets are not yet verified or recorded, the UI clearly displays "Verified sign demonstration not available yet" rather than fabricated gestures. LLMs are never permitted to hallucinate hand signs.
-- **Session Cleanup:** Switching modes, clearing transcripts, or ending the session clears suggestions and aborts pending requests.
+- **In-Camera AR Ghost-Hand Guide:** Selecting a suggested reply displays an animated, translucent grayscale hand overlay directly within the live camera viewport. The guide demonstrates the verified PSL hand orientation and movement trajectory in a safe lower corner without obstructing the live signer.
+- **Interactive Controls:** Includes Replay, Pause/Resume, Multi-step sequence navigation (e.g. "Step 1 of 2"), and collapsible floating pill state.
+- **Truthful Validation Status:** When visual video assets are not yet verified or recorded, the UI clearly displays "Verified sign demonstration not available yet" or marks video asset pending rather than fabricated gestures. LLMs are never permitted to hallucinate hand signs.
+- **Session Cleanup:** Switching modes, clearing transcripts, or ending the session clears suggestions, dismisses active ghost-hand guides, and aborts pending requests.
 
 ### Session Management & Recovery
 - Session states: `Ready` → `Camera starting` → `Translating` → `Paused/Error` → `Ended`.
