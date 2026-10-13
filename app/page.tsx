@@ -18,6 +18,7 @@ import { RecognitionStateMachine } from '@/lib/stateMachine';
 import { speechEngine } from '@/lib/speech';
 import { CONFIG } from '@/lib/config';
 import { getSuggestedRepliesForText } from '@/lib/replyCatalogue';
+import { runClientInference } from '@/lib/clientClassifier';
 
 function generateSessionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -36,7 +37,7 @@ export default function SignFlowHome() {
   const isSessionActiveRef = useRef<boolean>(false);
 
   // Connection & Recognition UI state
-  const [serviceStatus, setServiceStatus] = useState<ConnectionStatus>('connecting');
+  const [serviceStatus, setServiceStatus] = useState<ConnectionStatus | 'edge_active'>('connecting');
   const [statusText, setStatusText] = useState<string>('Ready to sign');
   const [candidateSign, setCandidateSign] = useState<string | null>(null);
   const [candidateConfidence, setCandidateConfidence] = useState<number>(0);
@@ -194,7 +195,15 @@ export default function SignFlowHome() {
       },
       (status) => {
         if (isMounted && sessionIdRef.current === sessionForThisEffect) {
-          setServiceStatus(status);
+          if (status === 'connected') {
+            setServiceStatus('connected');
+          } else if (status === 'disconnected') {
+            // When remote WebSocket is disconnected (e.g. standalone Vercel hosting),
+            // seamlessly transition to the high-performance in-browser AI engine
+            setServiceStatus('edge_active');
+          } else {
+            setServiceStatus(status);
+          }
         }
       }
     );
@@ -249,7 +258,14 @@ export default function SignFlowHome() {
           hands: hands,
         };
 
-        wsClient.sendFrame(payload);
+        const sent = wsClient.sendFrame(payload);
+        if (!sent) {
+          // If remote WebSocket is offline or not running (e.g. Vercel deployment),
+          // run instantaneous in-browser landmark normalization and PSL classification
+          const localPrediction = runClientInference(payload);
+          stateMachineRef.current?.processPrediction(localPrediction);
+          setServiceStatus((prev) => (prev === 'connected' ? prev : 'edge_active'));
+        }
       }
     }
 

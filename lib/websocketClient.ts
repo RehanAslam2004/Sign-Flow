@@ -14,6 +14,8 @@ export class SignFlowWebSocketClient {
   private url: string;
   private reconnectTimer: NodeJS.Timeout | null = null;
   private shouldReconnect = true;
+  private retryCount = 0;
+  private maxRetries = 2;
   private onPredictionCallback?: (event: PredictionEvent) => void;
   private onStatusChangeCallback?: (status: ConnectionStatus) => void;
   private activeSessionId: string | null = null;
@@ -24,6 +26,7 @@ export class SignFlowWebSocketClient {
 
   public setUrl(newUrl: string) {
     this.url = newUrl;
+    this.retryCount = 0;
     if (this.ws) {
       this.disconnect();
       this.shouldReconnect = true;
@@ -50,6 +53,7 @@ export class SignFlowWebSocketClient {
     this.onPredictionCallback = onPrediction;
     this.onStatusChangeCallback = onStatusChange;
     this.shouldReconnect = true;
+    this.retryCount = 0;
 
     this.initSocket();
   }
@@ -60,13 +64,17 @@ export class SignFlowWebSocketClient {
     }
 
     const targetUrl = this.url || CONFIG.WS_URL;
-    this.onStatusChangeCallback?.('connecting');
+    // Only notify "connecting" on the first attempt so fallback UI doesn't flicker
+    if (this.retryCount === 0) {
+      this.onStatusChangeCallback?.('connecting');
+    }
 
     try {
       this.ws = new WebSocket(targetUrl);
 
       this.ws.onopen = () => {
-        console.log('Connected to SignFlow CV inference service at', this.url);
+        console.log('Connected to SignFlow CV inference service at', targetUrl);
+        this.retryCount = 0;
         this.onStatusChangeCallback?.('connected');
       };
 
@@ -112,10 +120,18 @@ export class SignFlowWebSocketClient {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (!this.shouldReconnect) return;
 
+    if (this.retryCount >= this.maxRetries) {
+      this.shouldReconnect = false;
+      console.info(
+        '[SignFlow] Remote CV service not reachable after retry attempts. Remaining smoothly on in-browser AI engine.'
+      );
+      return;
+    }
+
+    this.retryCount++;
     this.reconnectTimer = setTimeout(() => {
-      console.log('Attempting to reconnect to CV service...');
       this.initSocket();
-    }, 2000);
+    }, 2500);
   }
 
   public sendFrame(payload: FramePayload): boolean {

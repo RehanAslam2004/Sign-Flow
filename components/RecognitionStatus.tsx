@@ -8,7 +8,7 @@ interface RecognitionStatusProps {
   candidateSign: string | null;
   candidateConfidence: number;
   lastConfirmedSign: string | null;
-  serviceStatus: 'connecting' | 'connected' | 'disconnected';
+  serviceStatus: 'connecting' | 'connected' | 'disconnected' | 'edge_active';
 }
 
 export default function RecognitionStatus({
@@ -17,6 +17,8 @@ export default function RecognitionStatus({
   lastConfirmedSign,
   serviceStatus,
 }: RecognitionStatusProps) {
+  const isOnline = serviceStatus === 'connected' || serviceStatus === 'edge_active';
+
   return (
     <div className="flex flex-col gap-2.5" aria-live="polite">
       {/* Service Connection & Current State Row */}
@@ -24,7 +26,7 @@ export default function RecognitionStatus({
         <div className="flex items-center gap-2">
           <span
             className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-              serviceStatus === 'connected'
+              isOnline
                 ? 'bg-emerald-500 ring-2 ring-emerald-100'
                 : serviceStatus === 'connecting'
                 ? 'bg-amber-500 animate-pulse'
@@ -34,7 +36,9 @@ export default function RecognitionStatus({
           />
           <span className="text-xs font-semibold text-slate-700">
             {serviceStatus === 'connected'
-              ? 'Service connected'
+              ? 'Backend connected'
+              : serviceStatus === 'edge_active'
+              ? 'AI Ready (In-Browser)'
               : serviceStatus === 'connecting'
               ? 'Connecting to service...'
               : 'Service offline'}
