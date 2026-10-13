@@ -101,16 +101,15 @@ export default function SignFlowHome() {
 
         // Automatic AR Ghost Hand Guide: strictly for 'partner' mode
         if (modeRef.current === 'partner') {
-          // Avoid re-triggering or restarting animation on identical duplicate phrase
-          if (lastHandledPhraseRef.current !== phrase) {
-            lastHandledPhraseRef.current = phrase;
-            const replies = getSuggestedRepliesForText(phrase);
-            // Automatically select best contextually appropriate verified reply
-            if (replies.length > 0 && replies[0].reference) {
-              setActiveGhostHandReply(replies[0]);
-            } else {
-              setActiveGhostHandReply(null);
-            }
+          const replies = getSuggestedRepliesForText(phrase);
+          // Automatically select best contextually appropriate verified reply
+          if (replies.length > 0 && replies[0].reference) {
+            setActiveGhostHandReply({
+              ...replies[0],
+              id: `${replies[0].id}_${Date.now()}`,
+            });
+          } else {
+            setActiveGhostHandReply(null);
           }
         } else {
           // In 'signing' mode, strictly ensure no guide is active

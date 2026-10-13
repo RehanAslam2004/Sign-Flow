@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { RotateCcw } from 'lucide-react';
 import { SuggestedReply, UsageMode, SignMotionStep } from '@/types/app';
 
 interface GhostHandGuideProps {
@@ -9,32 +10,74 @@ interface GhostHandGuideProps {
   onClose: () => void;
 }
 
+/**
+ * Lifecycle phases:
+ * 1. 'animating'  – SVG hand plays through the 2.8s motion once
+ * 2. 'holding'    – static hand visible for ~3s after animation completes
+ * 3. 'fading'     – opacity transition 1→0 over 300ms
+ * 4. 'hidden'     – overlay gone; small Replay pill shown outside camera
+ */
+type Phase = 'animating' | 'holding' | 'fading' | 'hidden';
+
 export default function GhostHandGuide({
   reply,
   mode,
+  onClose,
 }: GhostHandGuideProps) {
-  const [animationProgress, setAnimationProgress] = useState(0); // 0 to 1
+  const [phase, setPhase] = useState<Phase>('animating');
+  const [animationProgress, setAnimationProgress] = useState(0);
   const animFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(performance.now());
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastReplyIdRef = useRef<string | null>(null);
+
+  // Detect reduced-motion preference
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   const reference = reply?.reference;
   const motionSteps: SignMotionStep[] = reference?.motionSteps || [];
+  const replyId = reply?.id || reply?.referenceId || null;
 
-  // Reset animation when reply changes
+  // Reset lifecycle when a genuinely new reply arrives
   useEffect(() => {
+    if (!replyId || replyId === lastReplyIdRef.current) return;
+    lastReplyIdRef.current = replyId;
+
+    // Clear any running timers
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+
+    setAnimationProgress(0);
     startTimeRef.current = performance.now();
-  }, [reply?.id]);
 
-  // Smooth continuous animation loop (calm 2.8s cycle)
+    if (prefersReducedMotion) {
+      // Skip animation, go directly to holding phase
+      setAnimationProgress(1);
+      setPhase('holding');
+    } else {
+      setPhase('animating');
+    }
+  }, [replyId, prefersReducedMotion]);
+
+  // Animation loop – plays ONCE then transitions to 'holding'
   useEffect(() => {
-    if (!reference || motionSteps.length === 0) return;
+    if (phase !== 'animating' || !reference || motionSteps.length === 0) return;
 
-    const duration = 2800;
+    const duration = 2800; // ms
 
     const loop = (now: number) => {
-      const elapsed = (now - startTimeRef.current) % duration;
-      const progress = elapsed / duration;
+      const elapsed = now - startTimeRef.current;
+      const progress = Math.min(elapsed / duration, 1);
       setAnimationProgress(progress);
+
+      if (progress >= 1) {
+        // Animation done → enter hold phase
+        setPhase('holding');
+        return;
+      }
+
       animFrameRef.current = requestAnimationFrame(loop);
     };
 
@@ -43,55 +86,107 @@ export default function GhostHandGuide({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [reference, motionSteps]);
+  }, [phase, reference, motionSteps]);
 
-  // STRICT MODE GUARD: Never render if not in partner mode or no reply/reference
+  // Hold phase → start 3s countdown then fade
+  useEffect(() => {
+    if (phase !== 'holding') return;
+
+    holdTimerRef.current = setTimeout(() => {
+      setPhase('fading');
+    }, 3000);
+
+    return () => {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    };
+  }, [phase]);
+
+  // Fading phase → after transition duration, mark hidden
+  useEffect(() => {
+    if (phase !== 'fading') return;
+
+    const fadeTimer = setTimeout(() => {
+      setPhase('hidden');
+    }, 320); // slightly longer than the CSS transition (300ms)
+
+    return () => clearTimeout(fadeTimer);
+  }, [phase]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    };
+  }, []);
+
+  // Replay handler: restart the full lifecycle
+  const handleReplay = useCallback(() => {
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+
+    setAnimationProgress(0);
+    startTimeRef.current = performance.now();
+
+    if (prefersReducedMotion) {
+      setAnimationProgress(1);
+      setPhase('holding');
+    } else {
+      setPhase('animating');
+    }
+  }, [prefersReducedMotion]);
+
+  // STRICT MODE GUARD
   if (mode !== 'partner' || !reply || !reference) {
     return null;
   }
 
+  // If hidden → show tiny Replay pill at bottom of camera
+  if (phase === 'hidden') {
+    return (
+      <button
+        onClick={handleReplay}
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-900/50 backdrop-blur-sm border border-white/10 text-white/80 hover:text-white hover:bg-slate-900/70 transition-all duration-200 text-[10px] font-semibold tracking-wide cursor-pointer select-none"
+        aria-label={`Replay sign guide for ${getReplyShortLabel(reply)}`}
+      >
+        <RotateCcw className="w-3 h-3 shrink-0" aria-hidden="true" />
+        Replay: {getReplyShortLabel(reply)}
+      </button>
+    );
+  }
+
   // Determine current motion step and phase
-  // Phase 1 (0.00 - 0.25): Initial Preparatory Pose (Step 1)
-  // Phase 2 (0.25 - 0.80): Gentle Dynamic Motion Stroke (Step 2)
-  // Phase 3 (0.80 - 1.00): Rest Hold on completed gesture
   const hasTwoSteps = motionSteps.length > 1;
   const currentStep =
     hasTwoSteps && animationProgress >= 0.25 ? motionSteps[1] : motionSteps[0] || undefined;
   const trajectory = currentStep?.motionTrajectory || 'steady_hold';
 
-  // Compute calm, understated motion interpolation (no aggressive jumping or scaling)
+  // Compute calm motion interpolation
   let deltaX = 0;
   let deltaY = 0;
   let rotateDeg = 0;
 
   if (animationProgress < 0.25) {
-    // Prep stage: subtle breathing float
     deltaY = Math.sin(animationProgress * Math.PI * 4) * 1.5;
   } else if (animationProgress < 0.8) {
-    // Active motion stage: smooth sinusoidal easing
     const t = (animationProgress - 0.25) / 0.55;
     const eased = 0.5 - 0.5 * Math.cos(t * Math.PI);
 
     if (trajectory === 'temple_outward_arc') {
-      // Arcs gently forward and outward in traditional Salam
       deltaX = -4 + 14 * eased;
       deltaY = -6 + 10 * eased;
       rotateDeg = -3 + 7 * eased;
     } else if (trajectory === 'forward_sweep') {
-      // Glides gently forward toward partner
       deltaY = -10 * eased;
       deltaX = 3 * eased;
     } else if (trajectory === 'upward_lift') {
-      // Lifts gently upward in cooperative support
       deltaY = -12 * eased;
       deltaX = 2 * eased;
     } else if (trajectory === 'downward_sweep') {
-      // Sweeps gently downward
       deltaY = 10 * eased;
       deltaX = 6 * eased;
       rotateDeg = -4 * eased;
     } else if (trajectory === 'outward_arc') {
-      // Rotates gently outward
       deltaX = 12 * eased;
       deltaY = -4 * eased;
       rotateDeg = 8 * eased;
@@ -99,43 +194,41 @@ export default function GhostHandGuide({
       deltaY = Math.sin(animationProgress * Math.PI * 2) * 1.5;
     }
   } else {
-    // Hold stage: resting calmly at completion position
+    // Hold values at rest position
     if (trajectory === 'temple_outward_arc') {
-      deltaX = 10;
-      deltaY = 4;
-      rotateDeg = 4;
+      deltaX = 10; deltaY = 4; rotateDeg = 4;
     } else if (trajectory === 'forward_sweep') {
-      deltaY = -10;
-      deltaX = 3;
+      deltaY = -10; deltaX = 3;
     } else if (trajectory === 'upward_lift') {
-      deltaY = -12;
-      deltaX = 2;
+      deltaY = -12; deltaX = 2;
     } else if (trajectory === 'downward_sweep') {
-      deltaY = 10;
-      deltaX = 6;
-      rotateDeg = -4;
+      deltaY = 10; deltaX = 6; rotateDeg = -4;
     } else if (trajectory === 'outward_arc') {
-      deltaX = 12;
-      deltaY = -4;
-      rotateDeg = 8;
+      deltaX = 12; deltaY = -4; rotateDeg = 8;
     }
   }
 
-  // Format concise short label (e.g. "Reply: HELLO", "Reply: THANK YOU", "Reply: HERE YOU GO")
   const shortLabel = getReplyShortLabel(reply);
+
+  // Opacity: full during animating/holding, 0 during fading
+  const overlayOpacity = phase === 'fading' ? 0 : 1;
 
   return (
     <aside
-      className="absolute left-1/2 top-[36%] -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center gap-1.5 select-none transition-all duration-300 ease-out animate-in fade-in"
+      className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex flex-col items-center gap-1.5 select-none"
+      style={{
+        opacity: overlayOpacity,
+        transition: 'opacity 300ms ease-out',
+      }}
       aria-label="Translucent Pakistan Sign Language guide overlay"
     >
-      {/* 1. Translucent Grayscale Ghost Hand Demonstration */}
-      <div className="relative w-20 h-20 sm:w-22 sm:h-22 flex items-center justify-center">
+      {/* Translucent Grayscale Ghost Hand */}
+      <div className="relative w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center">
         <div
-          className="relative transition-transform ease-out pointer-events-none"
+          className="relative pointer-events-none"
           style={{
             transform: `translate(${deltaX}px, ${deltaY}px) rotate(${rotateDeg}deg)`,
-            transitionDuration: '50ms',
+            transition: prefersReducedMotion ? 'none' : 'transform 50ms ease-out',
             filter: 'drop-shadow(0 2px 5px rgba(0, 0, 0, 0.35))',
           }}
         >
@@ -143,13 +236,13 @@ export default function GhostHandGuide({
         </div>
       </div>
 
-      {/* 2. One Tiny Understated Label Directly Below */}
-      <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900/65 backdrop-blur-md border border-white/10 shadow-sm text-slate-100">
+      {/* Tiny label */}
+      <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900/60 backdrop-blur-md border border-white/10 shadow-sm text-slate-100">
         <span
           className="w-1.5 h-1.5 rounded-full bg-[#068D9D] shrink-0"
           aria-hidden="true"
         />
-        <span className="text-[11px] font-semibold tracking-wide text-white whitespace-nowrap">
+        <span className="text-[10px] sm:text-[11px] font-semibold tracking-wide text-white whitespace-nowrap">
           Reply: {shortLabel}
         </span>
       </div>
@@ -176,7 +269,7 @@ function getReplyShortLabel(reply: SuggestedReply): string {
   if (reply.reference?.pslLabel) {
     return reply.reference.pslLabel.split(/[\/(]/)[0].trim().toUpperCase();
   }
-  return reply.text.replace(/^[“"']|[”"'.!?]$/g, '').trim().toUpperCase();
+  return reply.text.replace(/^["\"']|["\"'.!?]$/g, '').trim().toUpperCase();
 }
 
 /**
