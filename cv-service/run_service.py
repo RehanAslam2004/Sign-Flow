@@ -23,18 +23,23 @@ def main():
     )
     python_bin = venv_python if os.path.exists(venv_python) else sys.executable
 
-    # Run uvicorn on port 8000
+    # Determine port and host (supports Render $PORT and cloud deployment)
+    port = os.environ.get("PORT", "8000")
+    is_cloud = "PORT" in os.environ or os.environ.get("RENDER") == "true"
+    host = os.environ.get("HOST", "0.0.0.0" if is_cloud else "127.0.0.1")
+
     cmd = [
         python_bin,
         "-m",
         "uvicorn",
         "main:app",
         "--host",
-        "127.0.0.1",
+        host,
         "--port",
-        "8000",
-        "--reload"
+        str(port)
     ]
+    if not is_cloud:
+        cmd.append("--reload")
     try:
         subprocess.run(cmd, check=True)
     except KeyboardInterrupt:
