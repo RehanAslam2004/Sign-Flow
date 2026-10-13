@@ -1,0 +1,38 @@
+# Render Blueprint Specification for SignFlow
+# https://render.com/docs/blueprint-spec
+
+services:
+  # -------------------------------------------------------------
+  # 1. SignFlow Python Computer Vision Inference Service (FastAPI)
+  # -------------------------------------------------------------
+  - type: web
+    name: signflow-cv
+    runtime: python
+    rootDir: cv-service
+    plan: free
+    region: oregon
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+
+  # -------------------------------------------------------------
+  # 2. SignFlow Next.js Frontend Web Application
+  # -------------------------------------------------------------
+  - type: web
+    name: signflow-web
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_VERSION
+        value: 20.18.0
+      - key: NEXT_PUBLIC_WS_URL
+        fromService:
+          type: web
+          name: signflow-cv
+          property: host
+          # Render provides <host>, the app automatically normalizes to wss://<host>/ws/predict

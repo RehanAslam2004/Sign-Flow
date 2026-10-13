@@ -1,24 +1,42 @@
 /**
  * SignFlow Browser Speech Synthesis Engine
- * Wraps window.speechSynthesis with voice selection and error fallbacks
+ * Wraps window.speechSynthesis with voice selection, session isolation, and error fallbacks
  */
 
 export class SpeechEngine {
   private isAvailable: boolean;
+  private activeSessionId: string | null = null;
+  private currentUtterance: SpeechSynthesisUtterance | null = null;
 
   constructor() {
     this.isAvailable = typeof window !== 'undefined' && 'speechSynthesis' in window;
   }
 
-  public speak(text: string, onEnd?: () => void): boolean {
+  public setActiveSessionId(sessionId: string | null) {
+    this.activeSessionId = sessionId;
+  }
+
+  public getActiveSessionId(): string | null {
+    return this.activeSessionId;
+  }
+
+  public speak(text: string, sessionId?: string, onEnd?: () => void): boolean {
     if (!this.isAvailable || !text.trim()) {
       onEnd?.();
       return false;
     }
 
+    // Session isolation guard: if session ID provided and doesn't match active session, reject
+    if (sessionId && this.activeSessionId && sessionId !== this.activeSessionId) {
+      console.warn(`[SpeechEngine] Suppressed speech for stale session ${sessionId} (active: ${this.activeSessionId})`);
+      return false;
+    }
+
     try {
       // Cancel ongoing speech to prevent overlapping audio
-      window.speechSynthesis.cancel();
+      this.cancel();
+
+      const targetSession = sessionId || this.activeSessionId;
 
       // Format words (e.g. "HELLO HELP" -> "Hello, Help.")
       const formatted = text
@@ -27,6 +45,7 @@ export class SpeechEngine {
         .join(', ') + '.';
 
       const utterance = new SpeechSynthesisUtterance(formatted);
+      this.currentUtterance = utterance;
       utterance.rate = 0.95; // slightly slower for clear, calm pronunciation
       utterance.pitch = 1.0;
 
@@ -41,12 +60,22 @@ export class SpeechEngine {
       }
 
       utterance.onend = () => {
-        onEnd?.();
+        // Only trigger onEnd if still in the same active session
+        if (!targetSession || targetSession === this.activeSessionId) {
+          onEnd?.();
+        }
+        if (this.currentUtterance === utterance) {
+          this.currentUtterance = null;
+        }
       };
 
       utterance.onerror = (e) => {
-        console.warn('SpeechSynthesis error:', e);
-        onEnd?.();
+        if (!targetSession || targetSession === this.activeSessionId) {
+          onEnd?.();
+        }
+        if (this.currentUtterance === utterance) {
+          this.currentUtterance = null;
+        }
       };
 
       window.speechSynthesis.speak(utterance);
@@ -59,6 +88,11 @@ export class SpeechEngine {
   }
 
   public cancel() {
+    if (this.currentUtterance) {
+      this.currentUtterance.onend = null;
+      this.currentUtterance.onerror = null;
+      this.currentUtterance = null;
+    }
     if (this.isAvailable) {
       window.speechSynthesis.cancel();
     }

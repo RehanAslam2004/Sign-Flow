@@ -19,9 +19,21 @@ import { speechEngine } from '@/lib/speech';
 import { CONFIG } from '@/lib/config';
 import { getSuggestedRepliesForText } from '@/lib/replyCatalogue';
 
+function generateSessionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return `sess_${crypto.randomUUID()}`;
+  }
+  return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
 export default function SignFlowHome() {
   const [mode, setMode] = useState<UsageMode>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+
+  // Session state: each conversation has an explicit unique session identity
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const isSessionActiveRef = useRef<boolean>(false);
 
   // Connection & Recognition UI state
   const [serviceStatus, setServiceStatus] = useState<ConnectionStatus>('connecting');
@@ -45,11 +57,9 @@ export default function SignFlowHome() {
   const animationFrameIdRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
   const frameCounterRef = useRef<number>(0);
-  const sessionIdRef = useRef<string>(`sess_${Date.now()}`);
 
-  // Mode and deduplication refs
+  // Mode ref
   const modeRef = useRef<UsageMode>(mode);
-  const lastHandledPhraseRef = useRef<string | null>(null);
 
   useEffect(() => {
     modeRef.current = mode;
@@ -58,35 +68,45 @@ export default function SignFlowHome() {
   // Clean suggestion and guide state on reset, end, or mode change
   const clearSuggestedRepliesState = useCallback(() => {
     setActiveGhostHandReply(null);
-    lastHandledPhraseRef.current = null;
   }, []);
-
-  // Handle Mode Selection and set appropriate default camera
-  const handleSelectMode = (selectedMode: 'signing' | 'partner') => {
-    clearSuggestedRepliesState();
-    setMode(selectedMode);
-    setFacingMode(selectedMode === 'partner' ? 'environment' : 'user');
-  };
-
-  const handleToggleFacingMode = () => {
-    setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
-  };
 
   // 1. Initialize State Machine
   useEffect(() => {
     stateMachineRef.current = new RecognitionStateMachine({
-      onCandidatePreview: (sign, confidence) => {
+      onCandidatePreview: (sign, confidence, eventSessionId) => {
+        // Discard any candidate from ended or mismatched session
+        if (
+          !isSessionActiveRef.current ||
+          (eventSessionId && eventSessionId !== sessionIdRef.current)
+        ) {
+          return;
+        }
         setCandidateSign(sign);
         setCandidateConfidence(confidence);
       },
-      onSignConfirmed: (sign) => {
+      onSignConfirmed: (sign, eventSessionId) => {
+        // Discard any confirmed sign from ended or mismatched session
+        if (
+          !isSessionActiveRef.current ||
+          (eventSessionId && eventSessionId !== sessionIdRef.current)
+        ) {
+          return;
+        }
         setLastConfirmedSign(sign);
         setActiveUtterance((prev) => [...prev, sign]);
       },
-      onUtteranceComplete: (phrase) => {
+      onUtteranceComplete: (phrase, eventSessionId) => {
+        // Discard completed utterance from ended or mismatched session
+        if (
+          !isSessionActiveRef.current ||
+          (eventSessionId && eventSessionId !== sessionIdRef.current)
+        ) {
+          return;
+        }
+
         // Add to transcript
         const newMessage: ConversationMessage = {
-          id: `msg_${Date.now()}`,
+          id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           text: phrase,
           timestamp: Date.now(),
           spoken: autoSpeechEnabled,
@@ -96,7 +116,7 @@ export default function SignFlowHome() {
 
         // Speak aloud
         if (autoSpeechEnabled) {
-          speechEngine.speak(phrase);
+          speechEngine.speak(phrase, eventSessionId);
         }
 
         // Automatic AR Ghost Hand Guide: strictly for 'partner' mode
@@ -112,23 +132,28 @@ export default function SignFlowHome() {
             setActiveGhostHandReply(null);
           }
         } else {
-          // In 'signing' mode, strictly ensure no guide is active
           setActiveGhostHandReply(null);
         }
       },
-      onStatusChange: (text) => {
+      onStatusChange: (text, eventSessionId) => {
+        if (
+          !isSessionActiveRef.current ||
+          (eventSessionId && eventSessionId !== sessionIdRef.current)
+        ) {
+          return;
+        }
         setStatusText(text);
       },
-    });
+    }, sessionIdRef.current || undefined);
 
     return () => {
       stateMachineRef.current?.reset();
     };
   }, [autoSpeechEnabled]);
 
-  // 2. Initialize MediaPipe & WebSocket when in active mode
+  // 2. Initialize MediaPipe & WebSocket when in active mode with active session ID
   useEffect(() => {
-    if (mode === null) {
+    if (mode === null || !currentSessionId) {
       if (wsClientRef.current) {
         wsClientRef.current.disconnect();
         wsClientRef.current = null;
@@ -136,12 +161,13 @@ export default function SignFlowHome() {
       return;
     }
 
+    const sessionForThisEffect = currentSessionId;
     let isMounted = true;
 
     // Load MediaPipe
     initHandLandmarker()
       .then((landmarker) => {
-        if (isMounted) {
+        if (isMounted && sessionIdRef.current === sessionForThisEffect) {
           landmarkerRef.current = landmarker;
         }
       })
@@ -149,16 +175,27 @@ export default function SignFlowHome() {
         console.error('Failed to initialize MediaPipe:', err);
       });
 
-    // Connect WebSocket
+    // Connect WebSocket scoped specifically to this session
     const client = new SignFlowWebSocketClient();
+    client.setActiveSessionId(sessionForThisEffect);
     wsClientRef.current = client;
 
     client.connect(
       (prediction) => {
+        // Strict race condition guard: drop stale predictions from ended or previous sessions
+        if (
+          !isSessionActiveRef.current ||
+          sessionIdRef.current !== sessionForThisEffect ||
+          (prediction.session_id && prediction.session_id !== sessionForThisEffect)
+        ) {
+          return;
+        }
         stateMachineRef.current?.processPrediction(prediction);
       },
       (status) => {
-        setServiceStatus(status);
+        if (isMounted && sessionIdRef.current === sessionForThisEffect) {
+          setServiceStatus(status);
+        }
       }
     );
 
@@ -166,16 +203,26 @@ export default function SignFlowHome() {
       isMounted = false;
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);
+        animationFrameIdRef.current = null;
       }
       client.disconnect();
+      if (wsClientRef.current === client) {
+        wsClientRef.current = null;
+      }
     };
-  }, [mode]);
+  }, [mode, currentSessionId]);
 
   // 3. Real-time Video Landmark Processing Loop
   const processVideoFrame = useCallback(() => {
     const video = videoElementRef.current;
     const landmarker = landmarkerRef.current;
     const wsClient = wsClientRef.current;
+    const activeSession = sessionIdRef.current;
+
+    // Halt immediately if session has ended or is inactive
+    if (!isSessionActiveRef.current || !activeSession) {
+      return;
+    }
 
     if (video && video.readyState >= 2 && landmarker && wsClient) {
       const now = performance.now();
@@ -190,10 +237,10 @@ export default function SignFlowHome() {
         const hasHands = hands.length > 0;
         setHandsDetected(hasHands);
 
-        // Send payload over WebSocket
+        // Send payload over WebSocket with active session ID
         const payload: FramePayload = {
           schema_version: '1.0',
-          session_id: sessionIdRef.current,
+          session_id: activeSession,
           frame_id: frameCounterRef.current,
           timestamp: Date.now(),
           image_width: video.videoWidth || 1280,
@@ -206,7 +253,9 @@ export default function SignFlowHome() {
       }
     }
 
-    animationFrameIdRef.current = requestAnimationFrame(processVideoFrame);
+    if (isSessionActiveRef.current && sessionIdRef.current === activeSession) {
+      animationFrameIdRef.current = requestAnimationFrame(processVideoFrame);
+    }
   }, []);
 
   const handleVideoReady = useCallback(
@@ -215,27 +264,107 @@ export default function SignFlowHome() {
       if (animationFrameIdRef.current) {
         cancelAnimationFrame(animationFrameIdRef.current);
       }
-      animationFrameIdRef.current = requestAnimationFrame(processVideoFrame);
+      if (isSessionActiveRef.current) {
+        animationFrameIdRef.current = requestAnimationFrame(processVideoFrame);
+      }
     },
     [processVideoFrame]
   );
 
-  // Actions
-  const handleEndSession = () => {
+  // START SESSION: Generates a brand new unique session, clean empty transcript, and fresh recognition state
+  const handleSelectMode = useCallback(
+    (selectedMode: 'signing' | 'partner') => {
+      // 1. Generate genuinely new unique session ID
+      const newSessionId = generateSessionId();
+      sessionIdRef.current = newSessionId;
+      isSessionActiveRef.current = true;
+      setCurrentSessionId(newSessionId);
+
+      // 2. Clear all previous session state completely
+      clearSuggestedRepliesState();
+      setMessages([]);
+      setActiveUtterance([]);
+      setCandidateSign(null);
+      setCandidateConfidence(0);
+      setLastConfirmedSign(null);
+      setHandsDetected(false);
+      setStatusText('Ready to sign');
+      frameCounterRef.current = 0;
+      lastFrameTimeRef.current = 0;
+
+      // 3. Reset state machine and speech engine to new session
+      stateMachineRef.current?.reset(newSessionId);
+      speechEngine.setActiveSessionId(newSessionId);
+      speechEngine.cancel();
+
+      // 4. Set mode and default camera facing
+      setMode(selectedMode);
+      setFacingMode(selectedMode === 'partner' ? 'environment' : 'user');
+    },
+    [clearSuggestedRepliesState]
+  );
+
+  // END SESSION: Complete teardown of active conversation and all asynchronous resources
+  const handleEndSession = useCallback(() => {
+    // 1. Mark session as inactive immediately before initiating async cleanup
+    isSessionActiveRef.current = false;
+    const endedSessionId = sessionIdRef.current;
+    sessionIdRef.current = null;
+    setCurrentSessionId(null);
+
+    // 2. Stop camera animation loop and release video element ref
     if (animationFrameIdRef.current) {
       cancelAnimationFrame(animationFrameIdRef.current);
+      animationFrameIdRef.current = null;
     }
-    speechEngine.cancel();
-    stateMachineRef.current?.reset();
-    clearSuggestedRepliesState();
-    setMode(null);
-  };
+    videoElementRef.current = null;
 
-  const handleClearTranscript = () => {
+    // 3. Stop speech immediately and detach callbacks
+    speechEngine.setActiveSessionId(null);
+    speechEngine.cancel();
+
+    // 4. Reset state machine and clear all timers
+    stateMachineRef.current?.reset();
+
+    // 5. Notify backend and disconnect WebSocket cleanly
+    if (wsClientRef.current) {
+      if (endedSessionId) {
+        wsClientRef.current.sendReset(endedSessionId);
+      }
+      wsClientRef.current.disconnect();
+      wsClientRef.current = null;
+    }
+
+    // 6. Clear suggested replies and ghost-hand guide
+    clearSuggestedRepliesState();
+
+    // 7. Reset transcript and all recognition UI states
     setMessages([]);
     setActiveUtterance([]);
-    stateMachineRef.current?.reset();
+    setCandidateSign(null);
+    setCandidateConfidence(0);
+    setLastConfirmedSign(null);
+    setHandsDetected(false);
+    setStatusText('Ready to sign');
+    setServiceStatus('disconnected');
+
+    // 8. Reset frame counters
+    frameCounterRef.current = 0;
+    lastFrameTimeRef.current = 0;
+
+    // 9. Reset mode to return to landing surface
+    setMode(null);
+  }, [clearSuggestedRepliesState]);
+
+  const handleClearTranscript = useCallback(() => {
+    setMessages([]);
+    setActiveUtterance([]);
+    stateMachineRef.current?.reset(sessionIdRef.current || undefined);
     clearSuggestedRepliesState();
+  }, [clearSuggestedRepliesState]);
+
+  const handleToggleFacingMode = () => {
+    setFacingMode((prev) => (prev === 'user' ? 'environment' : 'user'));
   };
 
   const handleFinishAndSpeak = () => {
@@ -277,14 +406,11 @@ export default function SignFlowHome() {
                 <span className="font-medium text-[11px] sm:text-xs">Auto-speak</span>
               </label>
 
-              {/* Change Mode Button */}
+              {/* Change Mode / End Session Button */}
               <button
-                onClick={() => {
-                  clearSuggestedRepliesState();
-                  setMode(null);
-                }}
+                onClick={handleEndSession}
                 className="min-h-[38px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors focus-visible:ring-2 focus-visible:ring-[#068D9D]"
-                aria-label="Return to situation selection screen"
+                aria-label="Return to situation selection screen and end session"
               >
                 <ArrowLeft className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                 <span className="hidden sm:inline">Change Mode</span>
@@ -300,12 +426,18 @@ export default function SignFlowHome() {
         {mode === null ? (
           <LandingSurface onSelectMode={handleSelectMode} />
         ) : (
-          <div className="max-w-6xl mx-auto w-full px-3 sm:px-4 py-4 sm:py-6 flex-1 flex flex-col gap-4 sm:gap-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+          <div
+            key={currentSessionId || 'active-session'}
+            className="max-w-6xl mx-auto w-full px-3 sm:px-4 py-4 sm:py-6 flex-1 flex flex-col gap-4 sm:gap-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
+          >
             {/* Backend Offline Warning Banner if disconnected */}
             {serviceStatus === 'disconnected' && (
               <ErrorBanner
                 type="backend-offline"
                 onRetry={() => {
+                  if (wsClientRef.current) {
+                    wsClientRef.current.setUrl(CONFIG.WS_URL);
+                  }
                   wsClientRef.current?.connect(
                     (pred) => stateMachineRef.current?.processPrediction(pred),
                     (status) => setServiceStatus(status)
@@ -343,10 +475,7 @@ export default function SignFlowHome() {
                     onSwitchCamera={handleToggleFacingMode}
                     onEndSession={handleEndSession}
                     onClearTranscript={handleClearTranscript}
-                    onChangeMode={() => {
-                      clearSuggestedRepliesState();
-                      setMode(null);
-                    }}
+                    onChangeMode={handleEndSession}
                     hasMessages={messages.length > 0}
                   />
                 </div>
@@ -414,10 +543,7 @@ export default function SignFlowHome() {
                     onSwitchCamera={handleToggleFacingMode}
                     onEndSession={handleEndSession}
                     onClearTranscript={handleClearTranscript}
-                    onChangeMode={() => {
-                      clearSuggestedRepliesState();
-                      setMode(null);
-                    }}
+                    onChangeMode={handleEndSession}
                     hasMessages={messages.length > 0}
                   />
                 </div>
@@ -426,7 +552,7 @@ export default function SignFlowHome() {
                 <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-sm flex-1 min-h-[260px] sm:min-h-[320px]">
                   <TranscriptView
                     messages={messages}
-                    onReplay={(text) => speechEngine.speak(text)}
+                    onReplay={(text) => speechEngine.speak(text, currentSessionId || undefined)}
                   />
                 </div>
               </div>

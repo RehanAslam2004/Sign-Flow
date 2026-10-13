@@ -28,6 +28,17 @@ app.add_middleware(
 
 classifier = PSLClassifier()
 
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "service": "SignFlow CV Inference Service",
+        "version": "1.0",
+        "health_check": "/health",
+        "websocket": "/ws/predict",
+        "supported_signs": classifier.labels
+    }
+
 @app.get("/health")
 async def health_check():
     return {
@@ -40,8 +51,8 @@ async def health_check():
 @app.websocket("/ws/predict")
 async def websocket_predict(websocket: WebSocket):
     await websocket.accept()
-    session_id = f"sess_{int(time.time() * 1000)}"
-    print(f"Client connected to /ws/predict [{session_id}]")
+    default_session_id = f"sess_{int(time.time() * 1000)}"
+    print(f"Client connected to /ws/predict [{default_session_id}]")
 
     try:
         while True:
@@ -52,7 +63,7 @@ async def websocket_predict(websocket: WebSocket):
             except json.JSONDecodeError:
                 await websocket.send_json({
                     "schema_version": "1.0",
-                    "session_id": session_id,
+                    "session_id": default_session_id,
                     "frame_id": 0,
                     "timestamp": int(time.time() * 1000),
                     "status": "error",
@@ -60,6 +71,23 @@ async def websocket_predict(websocket: WebSocket):
                     "confidence": 0.0,
                     "is_candidate": False,
                     "message": "Malformed JSON payload"
+                })
+                continue
+
+            session_id = frame_data.get("session_id", default_session_id)
+
+            # Explicit session reset message from frontend
+            if frame_data.get("type") == "reset":
+                await websocket.send_json({
+                    "schema_version": "1.0",
+                    "session_id": session_id,
+                    "frame_id": 0,
+                    "timestamp": int(time.time() * 1000),
+                    "status": "ready",
+                    "sign": None,
+                    "confidence": 0.0,
+                    "is_candidate": False,
+                    "message": "Session reset acknowledged"
                 })
                 continue
 
@@ -117,6 +145,6 @@ async def websocket_predict(websocket: WebSocket):
             await websocket.send_json(response)
 
     except WebSocketDisconnect:
-        print(f"Client disconnected from /ws/predict [{session_id}]")
+        print(f"Client disconnected from /ws/predict [{default_session_id}]")
     except Exception as e:
-        print(f"WebSocket session error [{session_id}]: {e}")
+        print(f"WebSocket session error [{default_session_id}]: {e}")

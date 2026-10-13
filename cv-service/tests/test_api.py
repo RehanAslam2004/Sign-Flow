@@ -16,7 +16,7 @@ def test_websocket_no_hands():
     with client.websocket_connect("/ws/predict") as websocket:
         payload = {
             "schema_version": "1.0",
-            "session_id": "test_sess",
+            "session_id": "test_sess_123",
             "frame_id": 10,
             "timestamp": 1234567,
             "image_width": 1280,
@@ -28,3 +28,16 @@ def test_websocket_no_hands():
         response = websocket.receive_json()
         assert response["status"] == "no_hands"
         assert response["frame_id"] == 10
+        assert response["session_id"] == "test_sess_123"
+
+def test_websocket_session_reset():
+    with client.websocket_connect("/ws/predict") as websocket:
+        payload = {
+            "type": "reset",
+            "session_id": "test_sess_reset_999"
+        }
+        websocket.send_json(payload)
+        response = websocket.receive_json()
+        assert response["status"] == "ready"
+        assert response["session_id"] == "test_sess_reset_999"
+        assert "Session reset acknowledged" in response["message"]
