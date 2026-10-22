@@ -1,0 +1,75 @@
+{
+  "suite": "psl_alphabets",
+  "classes": [
+    "ء",
+    "ا",
+    "ب",
+    "ت",
+    "ث",
+    "ج",
+    "ح",
+    "خ",
+    "د",
+    "ذ",
+    "ر",
+    "ز",
+    "س",
+    "ش",
+    "ص",
+    "ض",
+    "ط",
+    "ظ",
+    "ع",
+    "غ",
+    "ف",
+    "ق",
+    "ل",
+    "م",
+    "ن",
+    "و",
+    "ٹ",
+    "پ",
+    "چ",
+    "ڈ",
+    "ڑ",
+    "ژ",
+    "ک",
+    "گ",
+    "ہ",
+    "ی",
+    "ے"
+  ],
+  "total_classes": 37,
+  "tournament_results": {
+    "RandomForest": {
+      "train_time_sec": 1.259,
+      "val_accuracy": 0.9896,
+      "val_macro_f1": 0.99,
+      "val_weighted_f1": 0.9896,
+      "latency_us_per_sample": 115.35
+    },
+    "MLP": {
+      "train_time_sec": 4.106,
+      "val_accuracy": 0.9844,
+      "val_macro_f1": 0.9646,
+      "val_weighted_f1": 0.9829,
+      "latency_us_per_sample": 5.92
+    },
+    "SVM": {
+      "train_time_sec": 2.503,
+      "val_accuracy": 0.9922,
+      "val_macro_f1": 0.9844,
+      "val_weighted_f1": 0.9913,
+      "latency_us_per_sample": 545.3
+    }
+  },
+  "selected_champion": "RandomForest",
+  "test_metrics": {
+    "accuracy": 0.9844,
+    "top3_accuracy": 0.9948,
+    "macro_f1": 0.9852,
+    "weighted_f1": 0.9844
+  },
+  "model_file": "C:\\Users\\AR Computers\\Documents\\Rehan Project\\Sign flow\\cv-service\\ml\\../model\\psl_alphabets_classifier.joblib",
+  "labels_file": "C:\\Users\\AR Computers\\Documents\\Rehan Project\\Sign flow\\cv-service\\ml\\../model\\psl_alphabets_labels.json"
+}

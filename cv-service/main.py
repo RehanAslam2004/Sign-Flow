@@ -13,7 +13,7 @@ from inference import PSLClassifier
 
 app = FastAPI(
     title="SignFlow CV Inference Service",
-    description="WebSocket inference service for Pakistan Sign Language recognition",
+    description="WebSocket inference service for American Sign Language (ASL) fingerspelling and digit recognition",
     version="1.0.0"
 )
 
@@ -34,9 +34,11 @@ async def root():
         "status": "online",
         "service": "SignFlow CV Inference Service",
         "version": "1.0",
+        "available_languages": list(classifier.models.keys()),
+        "models_loaded": {k: True for k in classifier.models.keys()},
+        "supported_signs": classifier.labels_map,
         "health_check": "/health",
-        "websocket": "/ws/predict",
-        "supported_signs": classifier.labels
+        "websocket": "/ws/predict"
     }
 
 @app.get("/health")
@@ -45,7 +47,9 @@ async def health_check():
         "status": "healthy",
         "service": "SignFlow CV Inference",
         "version": "1.0",
-        "supported_signs": classifier.labels
+        "available_languages": list(classifier.models.keys()),
+        "models_loaded": {k: True for k in classifier.models.keys()},
+        "supported_signs": classifier.labels_map
     }
 
 @app.websocket("/ws/predict")
@@ -128,8 +132,9 @@ async def websocket_predict(websocket: WebSocket):
                 await websocket.send_json(response)
                 continue
 
-            # Run inference
-            pred = classifier.predict(features)
+            # Run inference with requested language
+            requested_lang = frame_data.get("language", "psl_words")
+            pred = classifier.predict(features, language=requested_lang)
 
             response = {
                 "schema_version": "1.0",
@@ -140,6 +145,7 @@ async def websocket_predict(websocket: WebSocket):
                 "sign": pred["sign"],
                 "confidence": pred["confidence"],
                 "is_candidate": pred["is_candidate"],
+                "language": pred.get("language", requested_lang),
                 "message": pred.get("message")
             }
             await websocket.send_json(response)

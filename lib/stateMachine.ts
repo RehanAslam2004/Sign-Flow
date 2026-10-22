@@ -106,7 +106,7 @@ export class RecognitionStateMachine {
   }
 
   private commitSign(sign: string) {
-    console.log(`[StateMachine] Confirmed PSL sign: ${sign}`);
+    console.log(`[StateMachine] Confirmed sign: ${sign}`);
     const currentSess = this.sessionId || '';
     this.lastCommittedSign = sign;
     this.currentCandidate = null;
@@ -123,6 +123,25 @@ export class RecognitionStateMachine {
     }, CONFIG.UTTERANCE_PAUSE_MS);
   }
 
+  private formatUtterance(tokens: string[]): string {
+    if (tokens.length === 0) return '';
+    let result = '';
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
+      if (token.length === 1) {
+        // Individual fingerspelling letter/digit: concatenate into word
+        result += token;
+      } else {
+        // Multi-letter word token: separate with space
+        if (result.length > 0 && !result.endsWith(' ')) {
+          result += ' ';
+        }
+        result += token;
+      }
+    }
+    return result;
+  }
+
   public finishUtterance() {
     if (this.utteranceTimer) {
       clearTimeout(this.utteranceTimer);
@@ -130,7 +149,7 @@ export class RecognitionStateMachine {
     }
     if (this.activeWords.length === 0) return;
 
-    const phrase = this.activeWords.join(' ');
+    const phrase = this.formatUtterance(this.activeWords);
     const currentSess = this.sessionId || '';
     this.activeWords = [];
     this.callbacks.onUtteranceComplete(phrase, currentSess);

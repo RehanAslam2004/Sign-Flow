@@ -1,0 +1,13 @@
+{
+  "suite": "psl_alphabets",
+  "total_samples": 5112,
+  "total_classes": 37,
+  "accuracy": 0.9961,
+  "top3_accuracy": 0.9992,
+  "macro_f1": 0.9963,
+  "weighted_f1": 0.9961,
+  "latency_us": {
+    "mean": 64256.12,
+    "p95": 82738.76
+  }
+}

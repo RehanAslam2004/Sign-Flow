@@ -9,9 +9,10 @@ import TranscriptView from '@/components/TranscriptView';
 import SessionControlBar from '@/components/SessionControlBar';
 import ErrorBanner from '@/components/ErrorBanner';
 import GhostHandGuide from '@/components/GhostHandGuide';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 
 import { UsageMode, ConversationMessage, SuggestedReply } from '@/types/app';
-import { FramePayload } from '@/types/contract';
+import { FramePayload, SignLanguageMode } from '@/types/contract';
 import { initHandLandmarker, extractLandmarksFromVideo } from '@/lib/mediapipe';
 import { SignFlowWebSocketClient, ConnectionStatus } from '@/lib/websocketClient';
 import { RecognitionStateMachine } from '@/lib/stateMachine';
@@ -19,6 +20,7 @@ import { speechEngine } from '@/lib/speech';
 import { CONFIG } from '@/lib/config';
 import { getSuggestedRepliesForText } from '@/lib/replyCatalogue';
 import { runClientInference } from '@/lib/clientClassifier';
+import { formatSignDisplay, getSignSpokenText, URDU_ALPHABET_MAP } from '@/lib/urduMapping';
 
 function generateSessionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -30,6 +32,22 @@ function generateSessionId(): string {
 export default function SignFlowHome() {
   const [mode, setMode] = useState<UsageMode>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+
+  // Multi-Language Sign Model state: PSL Words (default), PSL Urdu Alphabets, or ASL
+  const [selectedLanguage, setSelectedLanguage] = useState<SignLanguageMode>('psl_words');
+  const selectedLanguageRef = useRef<SignLanguageMode>(selectedLanguage);
+
+  useEffect(() => {
+    selectedLanguageRef.current = selectedLanguage;
+  }, [selectedLanguage]);
+
+  const handleLanguageChange = useCallback((lang: SignLanguageMode) => {
+    setSelectedLanguage(lang);
+    selectedLanguageRef.current = lang;
+    setCandidateSign(null);
+    setCandidateConfidence(0);
+    stateMachineRef.current?.reset(sessionIdRef.current || undefined);
+  }, []);
 
   // Session state: each conversation has an explicit unique session identity
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -105,10 +123,27 @@ export default function SignFlowHome() {
           return;
         }
 
+        // Format phrase for display in transcript (e.g. Urdu characters get bilingual annotation)
+        const displayPhrase = phrase
+          .split(' ')
+          .map((word) => formatSignDisplay(word))
+          .join(' ');
+
+        // Convert Urdu characters to phonetic letter names for clear browser TTS pronunciation
+        const spokenPhrase = phrase
+          .split(' ')
+          .map((word) => {
+            if (URDU_ALPHABET_MAP[word]) {
+              return URDU_ALPHABET_MAP[word].pronunciation;
+            }
+            return word;
+          })
+          .join(' ');
+
         // Add to transcript
         const newMessage: ConversationMessage = {
           id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          text: phrase,
+          text: displayPhrase,
           timestamp: Date.now(),
           spoken: autoSpeechEnabled,
         };
@@ -117,7 +152,7 @@ export default function SignFlowHome() {
 
         // Speak aloud
         if (autoSpeechEnabled) {
-          speechEngine.speak(phrase, eventSessionId);
+          speechEngine.speak(spokenPhrase, eventSessionId);
         }
 
         // Automatic AR Ghost Hand Guide: strictly for 'partner' mode
@@ -256,6 +291,7 @@ export default function SignFlowHome() {
           image_height: video.videoHeight || 720,
           hands_detected: hands.length,
           hands: hands,
+          language: selectedLanguageRef.current,
         };
 
         const sent = wsClient.sendFrame(payload);
@@ -408,6 +444,14 @@ export default function SignFlowHome() {
 
           {mode !== null && (
             <div className="flex items-center gap-2 shrink-0">
+              {/* Language Switcher Pill (Desktop & Tablet) */}
+              <div className="hidden sm:block">
+                <LanguageSwitcher
+                  selectedLanguage={selectedLanguage}
+                  onSelectLanguage={handleLanguageChange}
+                />
+              </div>
+
               {/* Auto Speech Toggle */}
               <label
                 className="inline-flex items-center gap-1.5 text-xs text-slate-700 bg-slate-100/90 hover:bg-slate-200/80 px-2.5 py-1.5 rounded-xl cursor-pointer select-none transition-colors"
@@ -446,6 +490,13 @@ export default function SignFlowHome() {
             key={currentSessionId || 'active-session'}
             className="max-w-6xl mx-auto w-full px-3 sm:px-4 py-4 sm:py-6 flex-1 flex flex-col gap-4 sm:gap-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
           >
+            {/* Mobile Language Switcher (Visible only on mobile) */}
+            <div className="sm:hidden flex justify-center w-full">
+              <LanguageSwitcher
+                selectedLanguage={selectedLanguage}
+                onSelectLanguage={handleLanguageChange}
+              />
+            </div>
             {/* Backend Offline Warning Banner if disconnected */}
             {serviceStatus === 'disconnected' && (
               <ErrorBanner
@@ -510,6 +561,7 @@ export default function SignFlowHome() {
                         candidateConfidence={candidateConfidence}
                         lastConfirmedSign={lastConfirmedSign}
                         serviceStatus={serviceStatus}
+                        selectedLanguage={selectedLanguage}
                       />
                     </div>
 
@@ -523,12 +575,16 @@ export default function SignFlowHome() {
                       </span>
                       {activeUtterance.length > 0 ? (
                         <p className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-wide break-words">
-                          {activeUtterance.join(' ')}
+                          {activeUtterance.map((s) => formatSignDisplay(s)).join(' ')}
                         </p>
                       ) : (
                         <p className="text-slate-500 text-xs sm:text-sm leading-relaxed">
                           {handsDetected
-                            ? 'Ready — perform a verified PSL sign...'
+                            ? selectedLanguage === 'psl_words'
+                              ? 'Ready — perform a PSL conversational sign (e.g. THANKS, EAT, GOOD)...'
+                              : selectedLanguage === 'psl_alphabets'
+                              ? 'Ready — sign an Urdu alphabet letter (e.g. ا, ب, ج)...'
+                              : 'Ready — perform an ASL sign or fingerspell a letter/number...'
                             : 'Position hands in the camera frame to start signing...'}
                         </p>
                       )}
@@ -568,7 +624,17 @@ export default function SignFlowHome() {
                 <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-sm flex-1 min-h-[260px] sm:min-h-[320px]">
                   <TranscriptView
                     messages={messages}
-                    onReplay={(text) => speechEngine.speak(text, currentSessionId || undefined)}
+                    onReplay={(text) => {
+                      // Normalize any bracketed romanizations before TTS playback
+                      const cleanSpoken = text
+                        .split(' ')
+                        .map((tok) => {
+                          const clean = tok.replace(/[()]/g, '');
+                          return getSignSpokenText(clean);
+                        })
+                        .join(' ');
+                      speechEngine.speak(cleanSpoken, currentSessionId || undefined);
+                    }}
                   />
                 </div>
               </div>

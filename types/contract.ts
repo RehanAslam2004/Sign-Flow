@@ -15,6 +15,8 @@ export interface DetectedHand {
   landmarks: LandmarkPoint[]; // 21 MediaPipe hand landmarks in order
 }
 
+export type SignLanguageMode = 'psl_words' | 'psl_alphabets' | 'asl';
+
 export interface FramePayload {
   schema_version: '1.0';
   session_id: string;
@@ -24,6 +26,7 @@ export interface FramePayload {
   image_height: number;
   hands_detected: number;
   hands: DetectedHand[];
+  language?: SignLanguageMode;
 }
 
 export type RecognitionStatus =
@@ -43,4 +46,6 @@ export interface PredictionEvent {
   confidence: number;
   is_candidate: boolean;
   message?: string | null;
+  language?: SignLanguageMode | string;
 }
+

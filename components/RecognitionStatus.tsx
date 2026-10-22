@@ -1,7 +1,7 @@
-'use client';
-
 import React from 'react';
 import { Eye, CheckCircle2 } from 'lucide-react';
+import { formatSignDisplay } from '@/lib/urduMapping';
+import { SignLanguageMode } from '@/types/contract';
 
 interface RecognitionStatusProps {
   statusText: string;
@@ -9,6 +9,7 @@ interface RecognitionStatusProps {
   candidateConfidence: number;
   lastConfirmedSign: string | null;
   serviceStatus: 'connecting' | 'connected' | 'disconnected' | 'edge_active';
+  selectedLanguage?: SignLanguageMode;
 }
 
 export default function RecognitionStatus({
@@ -16,8 +17,22 @@ export default function RecognitionStatus({
   candidateSign,
   lastConfirmedSign,
   serviceStatus,
+  selectedLanguage = 'psl_words',
 }: RecognitionStatusProps) {
   const isOnline = serviceStatus === 'connected' || serviceStatus === 'edge_active';
+
+  const getLanguageLabel = () => {
+    switch (selectedLanguage) {
+      case 'psl_words':
+        return 'PSL Words (12 Signs)';
+      case 'psl_alphabets':
+        return 'PSL Urdu Alphabets (37 Letters)';
+      case 'asl':
+        return 'ASL Model (36 Signs)';
+      default:
+        return 'AI Model';
+    }
+  };
 
   return (
     <div className="flex flex-col gap-2.5" aria-live="polite">
@@ -36,9 +51,9 @@ export default function RecognitionStatus({
           />
           <span className="text-xs font-semibold text-slate-700">
             {serviceStatus === 'connected'
-              ? 'Backend connected'
+              ? `Backend connected (${getLanguageLabel()})`
               : serviceStatus === 'edge_active'
-              ? 'AI Ready (In-Browser)'
+              ? `AI Ready (In-Browser • ${getLanguageLabel()})`
               : serviceStatus === 'connecting'
               ? 'Connecting to service...'
               : 'Service offline'}
@@ -57,7 +72,7 @@ export default function RecognitionStatus({
             <Eye className="w-4 h-4 text-[#068D9D] shrink-0" aria-hidden="true" />
             <span className="text-xs font-semibold text-[#068D9D]">Analyzing:</span>
             <span className="text-sm font-bold text-slate-900 tracking-wide truncate">
-              {candidateSign}
+              {formatSignDisplay(candidateSign)}
             </span>
           </div>
           <span className="text-[11px] font-medium text-slate-500 shrink-0">
@@ -71,10 +86,11 @@ export default function RecognitionStatus({
         <div className="flex items-center gap-2 text-xs font-medium text-slate-700 bg-emerald-50/80 px-3 py-1.5 rounded-lg border border-emerald-200/70">
           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
           <span>
-            Last recognized: <strong className="text-slate-900">{lastConfirmedSign}</strong>
+            Last recognized: <strong className="text-slate-900">{formatSignDisplay(lastConfirmedSign)}</strong>
           </span>
         </div>
       )}
     </div>
   );
 }
+

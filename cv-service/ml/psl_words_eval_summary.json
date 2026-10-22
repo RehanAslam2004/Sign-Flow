@@ -1,0 +1,13 @@
+{
+  "suite": "psl_words",
+  "total_samples": 706,
+  "total_classes": 12,
+  "accuracy": 1.0,
+  "top3_accuracy": 1.0,
+  "macro_f1": 1.0,
+  "weighted_f1": 1.0,
+  "latency_us": {
+    "mean": 665.37,
+    "p95": 945.72
+  }
+}

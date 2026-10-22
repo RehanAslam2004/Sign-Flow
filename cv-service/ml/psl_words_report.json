@@ -1,0 +1,50 @@
+{
+  "suite": "psl_words",
+  "classes": [
+    "EAT",
+    "GOOD",
+    "KNOW",
+    "LITTLE",
+    "ME",
+    "MY",
+    "NAME",
+    "PHONE",
+    "THANKS",
+    "WHAT",
+    "YOU",
+    "YOUR"
+  ],
+  "total_classes": 12,
+  "tournament_results": {
+    "RandomForest": {
+      "train_time_sec": 0.662,
+      "val_accuracy": 0.9906,
+      "val_macro_f1": 0.9689,
+      "val_weighted_f1": 0.9892,
+      "latency_us_per_sample": 795.91
+    },
+    "MLP": {
+      "train_time_sec": 1.497,
+      "val_accuracy": 0.9906,
+      "val_macro_f1": 0.9915,
+      "val_weighted_f1": 0.9906,
+      "latency_us_per_sample": 15.78
+    },
+    "SVM": {
+      "train_time_sec": 0.208,
+      "val_accuracy": 1.0,
+      "val_macro_f1": 1.0,
+      "val_weighted_f1": 1.0,
+      "latency_us_per_sample": 111.66
+    }
+  },
+  "selected_champion": "SVM",
+  "test_metrics": {
+    "accuracy": 1.0,
+    "top3_accuracy": 1.0,
+    "macro_f1": 1.0,
+    "weighted_f1": 1.0
+  },
+  "model_file": "C:\\Users\\AR Computers\\Documents\\Rehan Project\\Sign flow\\cv-service\\ml\\../model\\psl_words_classifier.joblib",
+  "labels_file": "C:\\Users\\AR Computers\\Documents\\Rehan Project\\Sign flow\\cv-service\\ml\\../model\\psl_words_labels.json"
+}
