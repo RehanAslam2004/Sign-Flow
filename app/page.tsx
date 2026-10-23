@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Volume2 } from 'lucide-react';
+import { ArrowLeft, Volume2, Activity, Flag } from 'lucide-react';
 import LandingSurface from '@/components/LandingSurface';
 import CameraViewport from '@/components/CameraViewport';
 import RecognitionStatus from '@/components/RecognitionStatus';
@@ -9,18 +9,21 @@ import TranscriptView from '@/components/TranscriptView';
 import SessionControlBar from '@/components/SessionControlBar';
 import ErrorBanner from '@/components/ErrorBanner';
 import GhostHandGuide from '@/components/GhostHandGuide';
-import LanguageSwitcher from '@/components/LanguageSwitcher';
+import FeedbackModal from '@/components/FeedbackModal';
+import RecognitionDiagnostics from '@/components/RecognitionDiagnostics';
 
 import { UsageMode, ConversationMessage, SuggestedReply } from '@/types/app';
-import { FramePayload, SignLanguageMode } from '@/types/contract';
+import { FramePayload, SignLanguageMode, PredictionCandidate } from '@/types/contract';
 import { initHandLandmarker, extractLandmarksFromVideo } from '@/lib/mediapipe';
 import { SignFlowWebSocketClient, ConnectionStatus } from '@/lib/websocketClient';
-import { RecognitionStateMachine } from '@/lib/stateMachine';
+import { RecognitionStateMachine, DiagnosticsSnapshot } from '@/lib/stateMachine';
 import { speechEngine } from '@/lib/speech';
 import { CONFIG } from '@/lib/config';
 import { getSuggestedRepliesForText } from '@/lib/replyCatalogue';
 import { runClientInference } from '@/lib/clientClassifier';
 import { formatSignDisplay, getSignSpokenText, URDU_ALPHABET_MAP } from '@/lib/urduMapping';
+import { formatSentence, formatPreview } from '@/lib/bilingualFormatter';
+import { getSignCategory } from '@/lib/signSemantics';
 
 function generateSessionId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -33,8 +36,8 @@ export default function SignFlowHome() {
   const [mode, setMode] = useState<UsageMode>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
 
-  // Multi-Language Sign Model state: PSL Words (default), PSL Urdu Alphabets, or ASL
-  const [selectedLanguage, setSelectedLanguage] = useState<SignLanguageMode>('psl_words');
+  // Unified Sign Recognition Engine (interprets PSL, ASL, and 3D pointing automatically)
+  const [selectedLanguage, setSelectedLanguage] = useState<SignLanguageMode>('unified');
   const selectedLanguageRef = useRef<SignLanguageMode>(selectedLanguage);
 
   useEffect(() => {
@@ -67,6 +70,26 @@ export default function SignFlowHome() {
 
   // Suggested Sign Reply state (exclusively active for 'partner' mode)
   const [activeGhostHandReply, setActiveGhostHandReply] = useState<SuggestedReply | null>(null);
+
+  // Diagnostics & Failure Collection State
+  const [isDiagnosticsOpen, setIsDiagnosticsOpen] = useState<boolean>(false);
+  const [isFeedbackModalOpen, setIsFeedbackModalOpen] = useState<boolean>(false);
+  const [diagnosticsSnapshot, setDiagnosticsSnapshot] = useState<DiagnosticsSnapshot | null>(null);
+  const [latestMargin, setLatestMargin] = useState<number>(0);
+  const [latestTopCandidates, setLatestTopCandidates] = useState<PredictionCandidate[]>([]);
+  const [latestHandedness, setLatestHandedness] = useState<string>('Right');
+  const [latestHandsCount, setLatestHandsCount] = useState<number>(0);
+
+  // Keyboard shortcut: Shift + D toggles diagnostics HUD
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.shiftKey && (e.key === 'D' || e.key === 'd')) {
+        setIsDiagnosticsOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Refs for loop & services
   const videoElementRef = useRef<HTMLVideoElement | null>(null);
@@ -114,7 +137,7 @@ export default function SignFlowHome() {
         setLastConfirmedSign(sign);
         setActiveUtterance((prev) => [...prev, sign]);
       },
-      onUtteranceComplete: (phrase, eventSessionId) => {
+      onUtteranceComplete: (phrase, rawTokens, eventSessionId) => {
         // Discard completed utterance from ended or mismatched session
         if (
           !isSessionActiveRef.current ||
@@ -123,41 +146,35 @@ export default function SignFlowHome() {
           return;
         }
 
-        // Format phrase for display in transcript (e.g. Urdu characters get bilingual annotation)
-        const displayPhrase = phrase
-          .split(' ')
-          .map((word) => formatSignDisplay(word))
-          .join(' ');
+        // Format phrase through the bilingual sentence grammar engine
+        const confidences = stateMachineRef.current?.getActiveConfidences() || [];
+        const formatted = formatSentence(rawTokens, selectedLanguageRef.current, confidences);
 
-        // Convert Urdu characters to phonetic letter names for clear browser TTS pronunciation
-        const spokenPhrase = phrase
-          .split(' ')
-          .map((word) => {
-            if (URDU_ALPHABET_MAP[word]) {
-              return URDU_ALPHABET_MAP[word].pronunciation;
-            }
-            return word;
-          })
-          .join(' ');
-
-        // Add to transcript
+        // Add enriched bilingual message to transcript
         const newMessage: ConversationMessage = {
           id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          text: displayPhrase,
+          text: formatted.englishSentence || formatted.rawDisplay || phrase,
           timestamp: Date.now(),
           spoken: autoSpeechEnabled,
+          rawTokens: formatted.rawTokens,
+          rawDisplay: formatted.rawDisplay,
+          urduSentence: formatted.urduSentence,
+          englishSentence: formatted.englishSentence,
+          isPatternMatched: formatted.isPatternMatched,
+          averageConfidence: formatted.confidence,
         };
         setMessages((prev) => [newMessage, ...prev]);
         setActiveUtterance([]);
 
-        // Speak aloud
+        // Speak aloud using optimized spoken text (English for reliable browser TTS)
         if (autoSpeechEnabled) {
-          speechEngine.speak(spokenPhrase, eventSessionId);
+          speechEngine.speak(formatted.spokenText || formatted.englishSentence || phrase, eventSessionId);
         }
 
         // Automatic AR Ghost Hand Guide: strictly for 'partner' mode
         if (modeRef.current === 'partner') {
-          const replies = getSuggestedRepliesForText(phrase);
+          const queryText = formatted.englishSentence || phrase;
+          const replies = getSuggestedRepliesForText(queryText);
           // Automatically select best contextually appropriate verified reply
           if (replies.length > 0 && replies[0].reference) {
             setActiveGhostHandReply({
@@ -226,7 +243,14 @@ export default function SignFlowHome() {
         ) {
           return;
         }
+
+        if (prediction.margin !== undefined) setLatestMargin(prediction.margin);
+        if (prediction.top_candidates) setLatestTopCandidates(prediction.top_candidates);
+        if (prediction.handedness) setLatestHandedness(prediction.handedness);
+        if (prediction.hands_count !== undefined) setLatestHandsCount(prediction.hands_count);
+
         stateMachineRef.current?.processPrediction(prediction);
+        setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
       },
       (status) => {
         if (isMounted && sessionIdRef.current === sessionForThisEffect) {
@@ -299,7 +323,13 @@ export default function SignFlowHome() {
           // If remote WebSocket is offline or not running (e.g. Vercel deployment),
           // run instantaneous in-browser landmark normalization and PSL classification
           const localPrediction = runClientInference(payload);
+          if (localPrediction.margin !== undefined) setLatestMargin(localPrediction.margin);
+          if (localPrediction.top_candidates) setLatestTopCandidates(localPrediction.top_candidates);
+          if (localPrediction.handedness) setLatestHandedness(localPrediction.handedness);
+          if (localPrediction.hands_count !== undefined) setLatestHandsCount(localPrediction.hands_count);
+
           stateMachineRef.current?.processPrediction(localPrediction);
+          setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
           setServiceStatus((prev) => (prev === 'connected' ? prev : 'edge_active'));
         }
       }
@@ -444,13 +474,27 @@ export default function SignFlowHome() {
 
           {mode !== null && (
             <div className="flex items-center gap-2 shrink-0">
-              {/* Language Switcher Pill (Desktop & Tablet) */}
-              <div className="hidden sm:block">
-                <LanguageSwitcher
-                  selectedLanguage={selectedLanguage}
-                  onSelectLanguage={handleLanguageChange}
-                />
+              {/* Unified Recognition Experience Badge */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/80 text-xs font-semibold text-slate-800 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-[#068D9D] animate-pulse" aria-hidden="true" />
+                <span>SignFlow Universal</span>
+                <span className="hidden md:inline text-[11px] font-normal text-slate-500">• Auto Interpreting</span>
               </div>
+
+              {/* Diagnostics HUD Toggle */}
+              <button
+                onClick={() => setIsDiagnosticsOpen((prev) => !prev)}
+                className={`min-h-[38px] inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-[#068D9D] ${
+                  isDiagnosticsOpen
+                    ? 'bg-slate-900 text-slate-100 shadow-xs'
+                    : 'text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200'
+                }`}
+                aria-label="Toggle developer recognition diagnostics"
+                title="Toggle diagnostics mode (Shift+D)"
+              >
+                <Activity className="w-3.5 h-3.5 text-[#068D9D]" aria-hidden="true" />
+                <span className="hidden md:inline">Diagnostics</span>
+              </button>
 
               {/* Auto Speech Toggle */}
               <label
@@ -490,13 +534,6 @@ export default function SignFlowHome() {
             key={currentSessionId || 'active-session'}
             className="max-w-6xl mx-auto w-full px-3 sm:px-4 py-4 sm:py-6 flex-1 flex flex-col gap-4 sm:gap-5 pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
           >
-            {/* Mobile Language Switcher (Visible only on mobile) */}
-            <div className="sm:hidden flex justify-center w-full">
-              <LanguageSwitcher
-                selectedLanguage={selectedLanguage}
-                onSelectLanguage={handleLanguageChange}
-              />
-            </div>
             {/* Backend Offline Warning Banner if disconnected */}
             {serviceStatus === 'disconnected' && (
               <ErrorBanner
@@ -570,17 +607,70 @@ export default function SignFlowHome() {
                       className="p-4 sm:p-5 rounded-xl bg-slate-50 border border-slate-200/70 min-h-[100px] sm:min-h-[110px] flex flex-col justify-center transition-all"
                       aria-live="polite"
                     >
-                      <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                        Current Translation
-                      </span>
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                          Current Translation
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {candidateSign && (
+                            <span className="inline-flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold bg-slate-200/60 px-2 py-0.5 rounded-full capitalize">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#068D9D] animate-pulse" />
+                              {getSignCategory(candidateSign)}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => setIsFeedbackModalOpen(true)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 transition-colors"
+                            title="Report or flag current prediction"
+                            aria-label="Flag sign failure"
+                          >
+                            <Flag className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
                       {activeUtterance.length > 0 ? (
-                        <p className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-wide break-words">
-                          {activeUtterance.map((s) => formatSignDisplay(s)).join(' ')}
-                        </p>
+                        (() => {
+                          const preview = formatPreview(activeUtterance, selectedLanguage);
+                          const hasUrdu = Boolean(preview.previewUrdu && preview.previewUrdu.trim().length > 0);
+
+                          return (
+                            <div className="space-y-2">
+                              {/* Accumulated Sign Sequence */}
+                              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono flex-wrap">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tokens:</span>
+                                <span className="text-slate-600 font-medium">{preview.rawDisplay}</span>
+                              </div>
+
+                              {/* Live Sentence Formation Preview */}
+                              {hasUrdu ? (
+                                <div className="space-y-0.5 pt-1.5 border-t border-slate-200/60">
+                                  <p
+                                    dir="rtl"
+                                    className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-wide text-right font-serif leading-relaxed"
+                                  >
+                                    {preview.previewUrdu}
+                                  </p>
+                                  {preview.previewEnglish && (
+                                    <p className="text-xs sm:text-sm font-semibold text-slate-600">
+                                      {preview.previewEnglish}
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <p className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-wide break-words pt-1 border-t border-slate-200/60">
+                                  {preview.previewEnglish || activeUtterance.map((s) => formatSignDisplay(s)).join(' ')}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })()
                       ) : (
                         <p className="text-slate-500 text-xs sm:text-sm leading-relaxed">
                           {handsDetected
-                            ? selectedLanguage === 'psl_words'
+                            ? selectedLanguage === 'psl_extended'
+                              ? 'Ready — perform a PSL sign (e.g. Assalamulaikum, Barai Mehrbani, G Han, Alif)...'
+                              : selectedLanguage === 'psl_words'
                               ? 'Ready — perform a PSL conversational sign (e.g. THANKS, EAT, GOOD)...'
                               : selectedLanguage === 'psl_alphabets'
                               ? 'Ready — sign an Urdu alphabet letter (e.g. ا, ب, ج)...'
@@ -639,6 +729,33 @@ export default function SignFlowHome() {
                 </div>
               </div>
             </div>
+
+            {/* Developer Recognition Diagnostics HUD */}
+            <RecognitionDiagnostics
+              isOpen={isDiagnosticsOpen}
+              onClose={() => setIsDiagnosticsOpen(false)}
+              snapshot={diagnosticsSnapshot}
+              handsDetected={handsDetected}
+              handedness={latestHandedness}
+              handsCount={latestHandsCount}
+              topCandidates={latestTopCandidates}
+              rawPrediction={candidateSign}
+              rawConfidence={candidateConfidence}
+              rawMargin={latestMargin}
+              selectedLanguage={selectedLanguage}
+              onFlagSample={() => setIsFeedbackModalOpen(true)}
+            />
+
+            {/* Failure Sample Feedback Modal */}
+            <FeedbackModal
+              isOpen={isFeedbackModalOpen}
+              onClose={() => setIsFeedbackModalOpen(false)}
+              predictedSign={candidateSign}
+              confidence={candidateConfidence}
+              margin={latestMargin}
+              language={selectedLanguage}
+              sessionId={currentSessionId || 'default'}
+            />
           </div>
         )}
       </main>

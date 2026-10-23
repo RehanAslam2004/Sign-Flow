@@ -96,6 +96,11 @@ export const CONFIG = {
   // Confidence thresholds
   CONFIDENCE_THRESHOLD: 0.70, // Minimum confidence to accept a sign as confirmed
   CANDIDATE_THRESHOLD: 0.50, // Minimum confidence to display as subtle candidate preview
+  MIN_MARGIN_THRESHOLD: 0.12, // Minimum margin between top-1 and top-2 candidates to reject ambiguous ambiguity
+
+  // Temporal stabilization tuning
+  TEMPORAL_WINDOW_MS: 350, // Sliding window for time-decayed consensus
+  GESTURE_REARM_MS: 250, // Retraction / rest duration required before re-arming the exact same sign
 
   // Frame processing
   TARGET_FPS: 25, // Throttling interval ~40ms between sent WebSocket frames

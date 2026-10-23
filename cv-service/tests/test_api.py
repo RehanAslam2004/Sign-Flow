@@ -104,4 +104,53 @@ def test_websocket_valid_landmarks_asl():
         assert response["status"] in ["recognized", "candidate", "uncertain"]
         assert response["language"] == "asl"
 
+def test_websocket_valid_landmarks_psl_extended():
+    with client.websocket_connect("/ws/predict") as websocket:
+        landmarks = [{"x": 0.5 + i * 0.01, "y": 0.5 + i * 0.01, "z": 0.0} for i in range(21)]
+        payload = {
+            "schema_version": "1.0",
+            "session_id": "test_sess_ext",
+            "frame_id": 55,
+            "timestamp": 12345690,
+            "language": "psl_extended",
+            "image_width": 1280,
+            "image_height": 720,
+            "hands_detected": 1,
+            "hands": [{"handedness": "Right", "score": 0.95, "landmarks": landmarks}]
+        }
+        websocket.send_json(payload)
+        response = websocket.receive_json()
+        assert response["status"] in ["recognized", "candidate", "uncertain"]
+        assert response["language"] == "psl_extended"
+        assert "margin" in response
+        assert "top_candidates" in response
+
+def test_record_feedback_sample_and_stats():
+    sample_payload = {
+        "sample_id": f"fb_test_{int(pytest.__version__.replace('.', ''))}",
+        "session_id": "test_sess_feedback",
+        "timestamp": 1234567890,
+        "language": "psl_extended",
+        "predicted_label": "Assalamulaikum",
+        "true_label": "Walaikumasalam",
+        "confidence": 0.62,
+        "margin": 0.05,
+        "review_status": "pending_review",
+        "notes": "Chirality test sample",
+        "features": [0.0] * 63
+    }
+    res = client.post("/api/feedback/sample", json=sample_payload)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "success"
+    assert data["sample_id"] == sample_payload["sample_id"]
+
+    stats_res = client.get("/api/feedback/stats")
+    assert stats_res.status_code == 200
+    stats = stats_res.json()
+    assert stats["total_samples"] >= 1
+    assert stats["pending_review"] >= 1
+
+
+
 

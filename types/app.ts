@@ -5,6 +5,12 @@ export interface ConversationMessage {
   text: string;
   timestamp: number;
   spoken: boolean;
+  rawTokens?: string[];
+  rawDisplay?: string;
+  urduSentence?: string;
+  englishSentence?: string;
+  isPatternMatched?: boolean;
+  averageConfidence?: number;
 }
 
 export interface RecognitionState {

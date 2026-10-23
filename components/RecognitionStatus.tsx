@@ -17,12 +17,16 @@ export default function RecognitionStatus({
   candidateSign,
   lastConfirmedSign,
   serviceStatus,
-  selectedLanguage = 'psl_words',
+  selectedLanguage = 'psl_extended',
 }: RecognitionStatusProps) {
   const isOnline = serviceStatus === 'connected' || serviceStatus === 'edge_active';
 
   const getLanguageLabel = () => {
     switch (selectedLanguage) {
+      case 'unified':
+        return 'Universal Sign & Gesture Interpretation';
+      case 'psl_extended':
+        return 'PSL Extended (89 Signs & Greetings)';
       case 'psl_words':
         return 'PSL Words (12 Signs)';
       case 'psl_alphabets':
@@ -30,7 +34,7 @@ export default function RecognitionStatus({
       case 'asl':
         return 'ASL Model (36 Signs)';
       default:
-        return 'AI Model';
+        return 'Universal Sign & Gesture Interpretation';
     }
   };
 

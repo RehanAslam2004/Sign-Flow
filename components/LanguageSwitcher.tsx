@@ -18,6 +18,12 @@ interface LanguageOption {
 
 const LANGUAGE_OPTIONS: LanguageOption[] = [
   {
+    id: 'psl_extended',
+    flag: '🇵🇰',
+    label: 'PSL Extended',
+    description: '89 Signs & Greetings',
+  },
+  {
     id: 'psl_words',
     flag: '🇵🇰',
     label: 'PSL Words',

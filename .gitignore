@@ -22,4 +22,6 @@ __pycache__/
 *$py.class
 *.task
 
-
+# Raw dataset archives
+cv-service/data/
+*.zip

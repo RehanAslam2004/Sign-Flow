@@ -1,0 +1,60 @@
+{
+  "evaluation_timestamp": 1792771725,
+  "test_samples": 4464,
+  "classes_count": 89,
+  "raw_accuracy": 0.9890232974910395,
+  "threshold_sweep": [
+    {
+      "threshold": 0.5,
+      "accepted_samples": 4398,
+      "rejection_rate": 0.0148,
+      "accepted_accuracy": 0.9952,
+      "false_acceptance_rate": 0.0048
+    },
+    {
+      "threshold": 0.6,
+      "accepted_samples": 4329,
+      "rejection_rate": 0.0302,
+      "accepted_accuracy": 0.9984,
+      "false_acceptance_rate": 0.0016
+    },
+    {
+      "threshold": 0.7,
+      "accepted_samples": 4233,
+      "rejection_rate": 0.0517,
+      "accepted_accuracy": 0.9995,
+      "false_acceptance_rate": 0.0005
+    },
+    {
+      "threshold": 0.8,
+      "accepted_samples": 4079,
+      "rejection_rate": 0.0862,
+      "accepted_accuracy": 1.0,
+      "false_acceptance_rate": 0.0
+    },
+    {
+      "threshold": 0.9,
+      "accepted_samples": 3745,
+      "rejection_rate": 0.1611,
+      "accepted_accuracy": 1.0,
+      "false_acceptance_rate": 0.0
+    }
+  ],
+  "margin_hysteresis": {
+    "confidence_threshold": 0.65,
+    "margin_threshold": 0.12,
+    "without_margin_accuracy": 0.9988315026875438,
+    "without_margin_errors": 5,
+    "with_margin_accuracy": 0.9988315026875438,
+    "with_margin_errors": 5,
+    "ambiguous_filtered": 0
+  },
+  "chirality_invariance": {
+    "unnormalized_left_hand_acc": 0.5689964157706093,
+    "normalized_left_hand_acc": 0.9890232974910395
+  },
+  "temporal_stabilization_simulation": {
+    "raw_flicker_switches": 4,
+    "stabilized_switches": 0
+  }
+}

@@ -52,3 +52,33 @@ def test_extract_frame_features_no_hands():
     features, status = extract_frame_features(sample_frame)
     assert status == "no_hands"
     assert features is None
+
+def test_handedness_chirality_flip():
+    # Asymmetric landmarks: x is positive
+    landmarks = [{"x": float(0.1 * i), "y": 0.5, "z": 0.0} for i in range(21)]
+    right_feats = normalize_hand_landmarks(landmarks, handedness="Right")
+    left_feats = normalize_hand_landmarks(landmarks, handedness="Left")
+
+    right_coords = right_feats.reshape(21, 3)
+    left_coords = left_feats.reshape(21, 3)
+
+    # In left-hand normalization, x-coordinates relative to wrist are inverted
+    assert np.allclose(right_coords[:, 0], -left_coords[:, 0], atol=1e-5)
+    # y and z coordinates remain identical
+    assert np.allclose(right_coords[:, 1], left_coords[:, 1], atol=1e-5)
+    assert np.allclose(right_coords[:, 2], left_coords[:, 2], atol=1e-5)
+
+def test_multi_hand_selection():
+    lms1 = [{"x": 0.2, "y": 0.5, "z": 0.0} for _ in range(21)]
+    lms2 = [{"x": 0.8, "y": 0.5, "z": 0.0} for _ in range(21)]
+    sample_frame = {
+        "hands_detected": 2,
+        "hands": [
+            {"handedness": "Left", "score": 0.80, "landmarks": lms1},
+            {"handedness": "Right", "score": 0.95, "landmarks": lms2},
+        ]
+    }
+    feats, status = extract_frame_features(sample_frame)
+    assert status == "valid"
+    assert feats is not None
+
