@@ -11,6 +11,11 @@ Enhanced with:
 from typing import List, Dict, Any, Optional, Tuple
 import numpy as np
 
+try:
+    from normalize import canonical_normalize_21, dict_landmarks_to_array
+except ImportError:
+    from .normalize import canonical_normalize_21, dict_landmarks_to_array
+
 
 def normalize_hand_landmarks(
     landmarks: List[Dict[str, float]],
@@ -19,57 +24,22 @@ def normalize_hand_landmarks(
     handedness: Optional[str] = None,
 ) -> np.ndarray:
     """
-    Normalizes 21 MediaPipe hand landmarks.
-    
-    Steps:
-    1. Converts normalized image coordinates to aspect-ratio-corrected space.
+    Normalizes 21 MediaPipe hand landmarks using canonical normalization:
+    1. Canonical unstretched normalized coordinate space (aspect_ratio=1.0).
     2. Centers all landmarks relative to the wrist (landmark 0).
-    3. Normalizes scale using the distance between wrist (0) and middle finger MCP (9).
-       Falls back to multi-MCP median if MCP 9 is collapsed or occluded.
-    4. Chirality normalization: Inverts x-coordinates for left-handed landmarks
-       to align with right-handed training baseline.
-    5. Returns a flattened array of 63 features: [x0, y0, z0, x1, y1, z1, ..., x20, y20, z20].
+    3. Chirality normalization: Inverts x-coordinates for left-handed landmarks
+       so features align with the right-handed training baseline.
+    4. Normalizes scale using the distance between wrist (0) and middle finger MCP (9)
+       with multi-MCP median fallback.
+    5. Returns a flattened array of 63 features: [x0, y0, z0, ..., x20, y20, z20].
     """
     if not landmarks or len(landmarks) != 21:
         raise ValueError(f"Expected 21 landmarks, received {len(landmarks) if landmarks else 0}")
 
-    aspect_ratio = image_width / max(image_height, 1)
+    coords = dict_landmarks_to_array(landmarks)
+    # Use aspect_ratio=1.0 to ensure zero skew against training landmark distribution
+    return canonical_normalize_21(coords, aspect_ratio=1.0, handedness=handedness)
 
-    # Convert to numpy array of shape (21, 3)
-    coords = np.zeros((21, 3), dtype=np.float32)
-    for i, pt in enumerate(landmarks):
-        # Scale x by aspect ratio so geometric distances in Euclidean space are circular
-        coords[i, 0] = float(pt.get("x", 0.0)) * aspect_ratio
-        coords[i, 1] = float(pt.get("y", 0.0))
-        coords[i, 2] = float(pt.get("z", 0.0))
-
-    # 1. Wrist-centering: wrist is index 0
-    wrist = coords[0].copy()
-    centered = coords - wrist
-
-    # 2. Chirality / Handedness normalization:
-    # If left hand, mirror x so gesture features match right-handed template
-    if handedness and str(handedness).strip().lower() == "left":
-        centered[:, 0] = -centered[:, 0]
-
-    # 3. Scale normalization: distance between wrist (0) and middle finger MCP (9)
-    scale_dist = float(np.linalg.norm(centered[9]))
-    
-    # Guard against division by zero (e.g. collapsed or occluded MCP 9)
-    if scale_dist < 1e-4:
-        # Fallback to median span across key metacarpal bases: MCP 5 (index), MCP 9 (middle), MCP 17 (pinky)
-        spans = [
-            float(np.linalg.norm(centered[5])),
-            float(np.linalg.norm(centered[9])),
-            float(np.linalg.norm(centered[17])),
-        ]
-        valid_spans = [s for s in spans if s > 1e-4]
-        scale_dist = float(np.median(valid_spans)) if valid_spans else 1.0
-
-    normalized = centered / scale_dist
-
-    # Flatten to 1D feature vector of length 63
-    return normalized.flatten().astype(np.float32)
 
 
 def check_boundary_proximity(

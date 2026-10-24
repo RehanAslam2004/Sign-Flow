@@ -11,6 +11,7 @@ export interface ConversationMessage {
   englishSentence?: string;
   isPatternMatched?: boolean;
   averageConfidence?: number;
+  alternatives?: string[];
 }
 
 export interface RecognitionState {

@@ -73,8 +73,10 @@ function runTests() {
   const helloRes = runClientInference(helloPayload);
   assert.strictEqual(helloRes.status, 'recognized');
   assert.strictEqual(helloRes.sign, 'HELLO');
-  assert.ok(helloRes.confidence >= 0.9);
-  console.log('✓ Passed: Open palm recognizes as HELLO with high confidence.\n');
+  assert.ok(helloRes.confidence >= 0.70);
+  assert.strictEqual(helloRes.language, 'heuristic');
+  console.log('✓ Passed: Open palm recognizes as HELLO with calibrated heuristic confidence.\n');
+
 
   // Test 3: Closed Fist -> STOP
   console.log('Test 3: Closed fist recognition (STOP)...');

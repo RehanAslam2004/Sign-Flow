@@ -119,15 +119,7 @@ class PSLClassifier:
         """
         t0 = time.perf_counter()
 
-        # 1. Evaluate 3D Pointing & Referential Kinematics if landmarks are present
-        pointing_res: Optional[PointingGestureResult] = None
-        if landmarks and len(landmarks) == 21:
-            try:
-                pointing_res = analyze_pointing_landmarks(landmarks, handedness=handedness)
-            except Exception as e:
-                pointing_res = None
-
-        # 2. Evaluate Primary Lexical Classifier (PSL Extended)
+        # 1. Evaluate Primary Lexical Classifier (PSL Extended)
         ext_model = self.models.get("psl_extended")
         ext_labels = self.labels_map.get("psl_extended", [])
         ext_top_label = None
@@ -149,48 +141,22 @@ class PSLClassifier:
                 lbl = ext_labels[idx] if idx < len(ext_labels) else str(ext_model.classes_[idx])
                 ext_candidates.append({"sign": lbl, "confidence": round(float(probs[idx]), 3)})
 
-        # 3. Arbitrate between Pointing Gestures and Lexical Signs
-        if pointing_res and pointing_res.is_pointing and pointing_res.candidate_psl:
-            p_sign = pointing_res.candidate_psl
-            p_conf = pointing_res.confidence
-            p_margin = pointing_res.margin
+        # 2. Evaluate 3D Pointing & Referential Kinematics if landmarks are present
+        DEICTIC_SIGNS = {"Ap", "Mujhay", "Ye", "Alif", "ME", "YOU", "THIS", "HELP"}
+        pointing_res: Optional[PointingGestureResult] = None
+        if landmarks and len(landmarks) == 21:
+            try:
+                pointing_res = analyze_pointing_landmarks(landmarks, handedness=handedness)
+            except Exception:
+                pointing_res = None
 
-            # If lexical model also agrees on the deictic sign (e.g. "Ap", "Mujhay", "Ye", "Alif"):
-            if ext_top_label == p_sign:
-                final_conf = min(0.98, max(p_conf, ext_conf) + 0.05)
-                final_margin = max(p_margin, ext_margin)
-            else:
-                final_conf = p_conf
-                final_margin = p_margin
-
-            top_cands = [
-                {"sign": p_sign, "confidence": round(final_conf, 3)},
-            ]
-            if pointing_res.candidate_en and pointing_res.candidate_en != p_sign:
-                top_cands.append({"sign": pointing_res.candidate_en, "confidence": round(final_conf * 0.95, 3)})
-            if ext_candidates and ext_candidates[0]["sign"] != p_sign:
-                top_cands.append(ext_candidates[0])
-
-            status = "recognized" if final_conf >= self.confidence_threshold and final_margin >= self.margin_threshold else "candidate"
-            rejection_reason = None if status == "recognized" else "candidate_preview"
-
-            latency_ms = round((time.perf_counter() - t0) * 1000, 2)
-            return {
-                "status": status,
-                "sign": p_sign,
-                "confidence": round(final_conf, 3),
-                "margin": round(final_margin, 3),
-                "top_candidates": top_cands[:3],
-                "is_candidate": True,
-                "language": "unified",
-                "rejection_reason": rejection_reason,
-                "inference_latency_ms": latency_ms,
-                "message": None,
-                "gesture_type": pointing_res.gesture_type,
-            }
-
-        # 4. Check Lexical Sign Recognition (PSL Extended)
+        # 3. Arbitrate: If Lexical model has strong confidence on a sign, ML wins
         if ext_model is not None and ext_conf >= self.confidence_threshold and ext_margin >= self.margin_threshold:
+            # If the recognized sign is a deictic sign and pointing agrees, reinforce confidence
+            if ext_top_label in DEICTIC_SIGNS and pointing_res and pointing_res.is_pointing and pointing_res.candidate_psl == ext_top_label:
+                ext_conf = min(0.98, max(pointing_res.confidence, ext_conf) + 0.05)
+                ext_margin = max(pointing_res.margin, ext_margin)
+
             rejection_reason = None
             status = "recognized"
             if near_boundary and ext_conf < (self.confidence_threshold + 0.10):
@@ -209,7 +175,41 @@ class PSLClassifier:
                 "rejection_reason": rejection_reason,
                 "inference_latency_ms": latency_ms,
                 "message": None,
+                "gesture_type": pointing_res.gesture_type if (pointing_res and pointing_res.is_pointing) else None,
             }
+
+        # 4. Pointing tie-breaker: If ML is uncertain or below threshold, allow verified pointing to arbitrate
+        if pointing_res and pointing_res.is_pointing and pointing_res.candidate_psl:
+            p_sign = pointing_res.candidate_psl
+            p_conf = pointing_res.confidence
+            p_margin = pointing_res.margin
+
+            top_cands = [
+                {"sign": p_sign, "confidence": round(p_conf, 3)},
+            ]
+            if pointing_res.candidate_en and pointing_res.candidate_en != p_sign:
+                top_cands.append({"sign": pointing_res.candidate_en, "confidence": round(p_conf * 0.95, 3)})
+            if ext_candidates and ext_candidates[0]["sign"] != p_sign:
+                top_cands.append(ext_candidates[0])
+
+            status = "recognized" if p_conf >= self.confidence_threshold and p_margin >= self.margin_threshold else "candidate"
+            rejection_reason = None if status == "recognized" else "candidate_preview"
+
+            latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+            return {
+                "status": status,
+                "sign": p_sign,
+                "confidence": round(p_conf, 3),
+                "margin": round(p_margin, 3),
+                "top_candidates": top_cands[:3],
+                "is_candidate": True,
+                "language": "unified",
+                "rejection_reason": rejection_reason,
+                "inference_latency_ms": latency_ms,
+                "message": None,
+                "gesture_type": pointing_res.gesture_type,
+            }
+
 
         # 5. Check Conversational Words Specialist (PSL Words: EAT, GOOD, KNOW, etc.)
         words_model = self.models.get("psl_words")
@@ -384,7 +384,9 @@ class PSLClassifier:
                     "message": f"Inference error: {str(e)}"
                 }
 
-        # 2. Geometric heuristic fallback if no model file loaded
+        # 2. Geometric heuristic fallback — ONLY used when NO machine learning model file is loaded.
+        # These are zero-dependency kinematic heuristics, NOT trained ML outputs.
+        # Confidences are calibrated to the 0.65-0.72 range to reflect heuristic status.
         coords = features.reshape(21, 3)
         thumb_ext = coords[4, 0] > coords[3, 0]
         index_ext = coords[8, 1] < coords[6, 1]
@@ -397,62 +399,63 @@ class PSLClassifier:
             return {
                 "status": "recognized",
                 "sign": "THANKS",
-                "confidence": 0.90,
-                "margin": 0.35,
+                "confidence": 0.72,
+                "margin": 0.25,
                 "is_candidate": True,
                 "language": "heuristic",
                 "rejection_reason": None,
-                "top_candidates": [{"sign": "THANKS", "confidence": 0.90}, {"sign": "EAT", "confidence": 0.55}],
+                "top_candidates": [{"sign": "THANKS", "confidence": 0.72}, {"sign": "EAT", "confidence": 0.45}],
                 "message": None
             }
         elif extended_count == 0 and not thumb_ext:
             return {
                 "status": "recognized",
                 "sign": "GOOD",
-                "confidence": 0.88,
-                "margin": 0.38,
+                "confidence": 0.70,
+                "margin": 0.25,
                 "is_candidate": True,
                 "language": "heuristic",
                 "rejection_reason": None,
-                "top_candidates": [{"sign": "GOOD", "confidence": 0.88}, {"sign": "YOU", "confidence": 0.50}],
+                "top_candidates": [{"sign": "GOOD", "confidence": 0.70}, {"sign": "YOU", "confidence": 0.45}],
                 "message": None
             }
         elif extended_count == 0 and thumb_ext:
             return {
                 "status": "recognized",
                 "sign": "YOU",
-                "confidence": 0.89,
-                "margin": 0.39,
+                "confidence": 0.70,
+                "margin": 0.25,
                 "is_candidate": True,
                 "language": "heuristic",
                 "rejection_reason": None,
-                "top_candidates": [{"sign": "YOU", "confidence": 0.89}, {"sign": "GOOD", "confidence": 0.50}],
+                "top_candidates": [{"sign": "YOU", "confidence": 0.70}, {"sign": "GOOD", "confidence": 0.45}],
                 "message": None
             }
         elif index_ext and not middle_ext and not ring_ext and not pinky_ext:
             return {
                 "status": "recognized",
                 "sign": "ME",
-                "confidence": 0.86,
-                "margin": 0.32,
+                "confidence": 0.68,
+                "margin": 0.22,
                 "is_candidate": True,
                 "language": "heuristic",
                 "rejection_reason": None,
-                "top_candidates": [{"sign": "ME", "confidence": 0.86}, {"sign": "EAT", "confidence": 0.54}],
+                "top_candidates": [{"sign": "ME", "confidence": 0.68}, {"sign": "EAT", "confidence": 0.45}],
                 "message": None
             }
         elif index_ext and middle_ext and ring_ext and not pinky_ext:
             return {
                 "status": "recognized",
                 "sign": "EAT",
-                "confidence": 0.87,
-                "margin": 0.30,
+                "confidence": 0.68,
+                "margin": 0.22,
                 "is_candidate": True,
                 "language": "heuristic",
                 "rejection_reason": None,
-                "top_candidates": [{"sign": "EAT", "confidence": 0.87}, {"sign": "THANKS", "confidence": 0.57}],
+                "top_candidates": [{"sign": "EAT", "confidence": 0.68}, {"sign": "THANKS", "confidence": 0.45}],
                 "message": None
             }
+
         else:
             return {
                 "status": "candidate",

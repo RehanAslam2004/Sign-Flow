@@ -18,6 +18,10 @@ from typing import Dict, Any, Tuple, List
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
+# Ensure cv-service root is on python path for importing normalize
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from normalize import canonical_normalize_21
+
 DEFAULT_DB_PATH = os.path.expanduser(
     r"~/.cache/kagglehub/datasets/saadbutt321/pakistan-sign-language-dataset/versions/2/main_dataset.db"
 )
@@ -25,32 +29,16 @@ DEFAULT_DB_PATH = os.path.expanduser(
 def normalize_openpose_landmarks_21(raw_coords_2d: np.ndarray) -> np.ndarray:
     """
     Normalizes 21 2D landmarks (shape: (21, 2)) to SignFlow canonical 63-dim feature vector.
-    1. Wrist is at index 0.
-    2. Subtract wrist from all coordinates.
-    3. Scale by distance between wrist (0) and middle MCP (8 in 0-indexed coords, index 9 in OpenPose 1-indexed).
-    4. Return 63-dim vector with z=0.0.
+    1. Embeds in 3D: [x, y, 0.0].
+    2. Applies canonical wrist-centering (landmark 0).
+    3. Scales by distance between wrist (0) and middle MCP (landmark 9).
     """
-    coords = raw_coords_2d.astype(np.float32) # (21, 2)
-    wrist = coords[0].copy()
-    centered = coords - wrist
+    coords_3d = np.zeros((21, 3), dtype=np.float32)
+    coords_3d[:, 0] = raw_coords_2d[:, 0].astype(np.float32)
+    coords_3d[:, 1] = raw_coords_2d[:, 1].astype(np.float32)
+    coords_3d[:, 2] = 0.0
+    return canonical_normalize_21(coords_3d, aspect_ratio=1.0, handedness=None)
 
-    # Middle finger MCP is landmark index 8 (0-indexed)
-    mcp = centered[8]
-    scale_dist = np.hypot(mcp[0], mcp[1])
-    if scale_dist < 1e-4:
-        scale_dist = np.max(np.abs(centered))
-        if scale_dist < 1e-4:
-            scale_dist = 1.0
-
-    normalized_2d = centered / scale_dist
-
-    # Embed in 3D: [x, y, 0.0] for each landmark
-    features_63 = np.zeros((21, 3), dtype=np.float32)
-    features_63[:, 0] = normalized_2d[:, 0]
-    features_63[:, 1] = normalized_2d[:, 1]
-    features_63[:, 2] = 0.0
-
-    return features_63.flatten()
 
 def process_table(
     db_path: str,

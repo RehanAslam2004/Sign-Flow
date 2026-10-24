@@ -38,11 +38,16 @@ export class SpeechEngine {
 
       const targetSession = sessionId || this.activeSessionId;
 
-      // Format words (e.g. "HELLO HELP" -> "Hello, Help.")
-      const formatted = text
-        .split(' ')
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-        .join(', ') + '.';
+      // Natural sentence formatting:
+      // Trim, capitalize the leading character, and avoid duplicated punctuation
+      let formatted = text.trim();
+      if (formatted.length > 0) {
+        formatted = formatted.charAt(0).toUpperCase() + formatted.slice(1);
+      }
+      if (formatted.length > 0 && !/[.!?]$/.test(formatted)) {
+        formatted += '.';
+      }
+
 
       const utterance = new SpeechSynthesisUtterance(formatted);
       this.currentUtterance = utterance;

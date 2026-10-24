@@ -282,11 +282,12 @@ export class RecognitionStateMachine {
     const requiredStability = this.getAdaptiveStabilityMs(confidence, margin);
 
     if (heldDuration >= requiredStability && confidence >= CONFIG.CONFIDENCE_THRESHOLD) {
-      // Require consensus agreement unless high-confidence bypass
-      if (bestSign !== detectedSign && !isHighConfidenceBypass) {
+      // Require consensus agreement and sufficient consensus ratio (>= 55%) unless high-confidence bypass
+      if (!isHighConfidenceBypass && (bestSign !== detectedSign || ratio < 0.55)) {
         this.currentRejectionReason = 'temporal_consensus_waiting';
         return;
       }
+
 
       // Check deduplication lock: are we holding the sign we just committed?
       if (this.lastCommittedSign === detectedSign) {
@@ -401,8 +402,14 @@ export class RecognitionStateMachine {
       lifecycleState: this.lifecycleState,
       currentCandidate: this.currentCandidate,
       candidateElapsedMs: candidateElapsed,
-      requiredStabilityMs: 500,
+      requiredStabilityMs: this.currentCandidate
+        ? this.getAdaptiveStabilityMs(
+            this.voteBuffer.length > 0 ? this.voteBuffer[this.voteBuffer.length - 1].confidence : 0,
+            this.voteBuffer.length > 0 ? this.voteBuffer[this.voteBuffer.length - 1].margin : 0,
+          )
+        : 0,
       consensusSign: this.lastConsensusSign,
+
       consensusRatio: Math.round(this.lastConsensusRatio * 100) / 100,
       temporalBufferSize: this.voteBuffer.length,
       rejectionReason: this.currentRejectionReason,

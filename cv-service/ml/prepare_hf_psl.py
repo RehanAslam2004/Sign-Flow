@@ -15,29 +15,21 @@ import json
 import zipfile
 import numpy as np
 
+# Ensure cv-service root is on python path for importing normalize
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from normalize import canonical_normalize_21
+
 # Ensure UTF-8 output on Windows
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 
-def normalize_coords_21(coords: np.ndarray) -> np.ndarray:
+def normalize_coords_21(coords: np.ndarray, handedness: str = "Right") -> np.ndarray:
     """
-    Applies canonical wrist-centering and palm scale normalization
-    identically to cv-service/preprocessing.py.
+    Applies canonical wrist-centering, chirality normalization, and palm scale normalization
+    identically to cv-service/preprocessing.py and cv-service/normalize.py.
     """
-    # 1. Wrist-centering (landmark 0)
-    wrist = coords[0].copy()
-    centered = coords - wrist
-
-    # 2. Scale normalization by distance between wrist (0) and middle MCP (9)
-    scale_dist = np.linalg.norm(centered[9])
-    if scale_dist < 1e-4:
-        scale_dist = np.max(np.abs(centered))
-        if scale_dist < 1e-4:
-            scale_dist = 1.0
-
-    normalized = centered / scale_dist
-    return normalized.flatten().astype(np.float32)
+    return canonical_normalize_21(coords, aspect_ratio=1.0, handedness=handedness)
 
 
 def process_dataset(zip_path: str, output_dir: str):
@@ -54,6 +46,7 @@ def process_dataset(zip_path: str, output_dir: str):
 
     features_list = []
     labels_list = []
+    sequence_ids_list = []
     category_counts = {}
 
     for idx, filename in enumerate(all_npy_files):
@@ -81,16 +74,18 @@ def process_dataset(zip_path: str, output_dir: str):
             lh_mag = np.abs(lh).sum()
             rh_mag = np.abs(rh).sum()
 
-            # Identify active hand
+            # Identify active hand & normalize with chirality alignment
             if rh_mag >= lh_mag and rh_mag > 1e-3:
-                normed = normalize_coords_21(rh)
+                normed = normalize_coords_21(rh, handedness="Right")
                 features_list.append(normed)
                 labels_list.append(category)
+                sequence_ids_list.append(idx)
                 category_counts[category] = category_counts.get(category, 0) + 1
             elif lh_mag > 1e-3:
-                normed = normalize_coords_21(lh)
+                normed = normalize_coords_21(lh, handedness="Left")
                 features_list.append(normed)
                 labels_list.append(category)
+                sequence_ids_list.append(idx)
                 category_counts[category] = category_counts.get(category, 0) + 1
 
         if (idx + 1) % 500 == 0:
@@ -98,17 +93,19 @@ def process_dataset(zip_path: str, output_dir: str):
 
     X = np.array(features_list, dtype=np.float32)
     y = np.array(labels_list, dtype=object)
+    seq_ids = np.array(sequence_ids_list, dtype=np.int32)
 
     classes = sorted(list(set(labels_list)))
     print(f"\n[PreparePSLExtended] Extraction Complete:")
     print(f"  Total Extracted Feature Vectors: {len(X)}")
     print(f"  Unique Classes: {len(classes)}")
     print(f"  Feature Dimensions: {X.shape[1]}")
+    print(f"  Unique Sequences Tracked: {len(np.unique(seq_ids))}")
 
     # Save npz
     os.makedirs(output_dir, exist_ok=True)
     npz_path = os.path.join(output_dir, "psl_extended_features.npz")
-    np.savez_compressed(npz_path, X=X, y=y)
+    np.savez_compressed(npz_path, X=X, y=y, seq_ids=seq_ids)
     print(f"  Saved features archive to: {npz_path}")
 
     # Save manifest

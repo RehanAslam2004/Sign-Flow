@@ -18,6 +18,9 @@ interface RecognitionDiagnosticsProps {
   rawMargin?: number;
   selectedLanguage: SignLanguageMode;
   onFlagSample: () => void;
+  geminiModel?: string;
+  sequenceId?: string | number;
+  uncertaintyReason?: string | null;
 }
 
 export default function RecognitionDiagnostics({
@@ -33,6 +36,9 @@ export default function RecognitionDiagnostics({
   rawMargin = 0,
   selectedLanguage,
   onFlagSample,
+  geminiModel = 'gemini-2.0-flash',
+  sequenceId,
+  uncertaintyReason,
 }: RecognitionDiagnosticsProps) {
   if (!isOpen) return null;
 
@@ -98,20 +104,20 @@ export default function RecognitionDiagnostics({
             </span>
           </div>
           <div className="p-2 rounded-xl bg-slate-800/60 border border-slate-700/40">
-            <span className="text-[10px] text-slate-400 block font-medium">FPS</span>
-            <span className="font-bold text-slate-200 font-mono">
-              {fps > 0 ? `${fps} fps` : '~25 fps'}
+            <span className="text-[10px] text-slate-400 block font-medium">Engine</span>
+            <span className="font-bold text-teal-400 font-mono text-[10px] truncate block" title={geminiModel}>
+              {geminiModel}
             </span>
           </div>
           <div className="p-2 rounded-xl bg-slate-800/60 border border-slate-700/40">
-            <span className="text-[10px] text-slate-400 block font-medium">Model</span>
-            <span className="font-bold text-[#068D9D] uppercase text-[10px] truncate block">
-              {selectedLanguage}
+            <span className="text-[10px] text-slate-400 block font-medium">Seq / Window</span>
+            <span className="font-bold text-[#068D9D] font-mono text-[10px] truncate block">
+              {sequenceId ? `#${sequenceId}` : 'Ready'}
             </span>
           </div>
         </div>
 
-        {/* Row 2: Lifecycle State & Consensus */}
+        {/* Row 2: Lifecycle State & Uncertainty Status */}
         <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/40 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">Lifecycle:</span>
@@ -120,15 +126,15 @@ export default function RecognitionDiagnostics({
             </span>
           </div>
           <div className="flex items-center justify-between text-slate-300">
-            <span className="text-slate-400">Consensus (350ms):</span>
-            <span className="font-mono font-bold text-slate-200">
-              {snapshot?.consensusSign || 'None'} ({Math.round((snapshot?.consensusRatio || 0) * 100)}%)
+            <span className="text-slate-400">Interpretation:</span>
+            <span className="font-mono font-bold text-slate-200 truncate max-w-[160px]">
+              {rawPrediction || 'Idle'} ({Math.round(rawConfidence * 100)}%)
             </span>
           </div>
-          {rejectionReason && (
+          {(uncertaintyReason || rejectionReason) && (
             <div className="pt-1 border-t border-slate-700/50 flex items-center gap-1.5 text-amber-300/90 text-[10px]">
               <AlertTriangle className="w-3 h-3 shrink-0" />
-              <span className="font-mono">Filter: {rejectionReason}</span>
+              <span className="font-mono truncate">Notice: {uncertaintyReason || rejectionReason}</span>
             </div>
           )}
         </div>

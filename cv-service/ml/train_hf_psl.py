@@ -36,11 +36,22 @@ def run_tournament(features_path: str, model_dir: str, reports_dir: str):
     num_classes = len(classes)
     print(f"[TrainPSLExtended] Total samples: {X.shape[0]}, Features: {X.shape[1]}, Classes: {num_classes}")
 
-    # Stratified Train/Test Split (80% train, 20% test)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.20, random_state=42, stratify=y
-    )
+    seq_ids = data["seq_ids"] if "seq_ids" in data else None
+
+    if seq_ids is not None:
+        from sklearn.model_selection import GroupShuffleSplit
+        print(f"[TrainPSLExtended] Using GroupShuffleSplit on {len(np.unique(seq_ids))} unique video sequences to prevent data leakage...")
+        gss = GroupShuffleSplit(n_splits=1, test_size=0.20, random_state=42)
+        train_idx, test_idx = next(gss.split(X, y, groups=seq_ids))
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+    else:
+        # Fallback Stratified Train/Test Split (80% train, 20% test)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.20, random_state=42, stratify=y
+        )
     print(f"[TrainPSLExtended] Train set: {len(X_train)} samples, Test set: {len(X_test)} samples")
+
 
     candidates = {
         "RandomForest": RandomForestClassifier(

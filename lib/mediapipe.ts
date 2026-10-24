@@ -48,7 +48,8 @@ export async function initHandLandmarker(): Promise<HandLandmarker> {
 export function extractLandmarksFromVideo(
   landmarker: HandLandmarker,
   video: HTMLVideoElement,
-  timestampMs: number
+  timestampMs: number,
+  isFrontFacing: boolean = true
 ): DetectedHand[] {
   if (video.readyState < 2) return [];
 
@@ -63,7 +64,18 @@ export function extractLandmarksFromVideo(
     for (let i = 0; i < result.landmarks.length; i++) {
       const rawPoints = result.landmarks[i];
       const handednessCategory = result.handedness?.[i]?.[0];
-      const handedness = (handednessCategory?.categoryName as 'Left' | 'Right') || 'Unknown';
+      const rawHandedness = handednessCategory?.categoryName;
+
+      // MediaPipe reports handedness from the camera's perspective.
+      // When using the front-facing camera (selfie mode), the frame is
+      // horizontally mirrored relative to the user, so MediaPipe's
+      // "Left" actually corresponds to the user's physical right hand.
+      // We invert the label to match the user's physical body frame.
+      // For rear-facing (environment) camera, use MediaPipe's label as-is.
+      const handedness: 'Left' | 'Right' | 'Unknown' = isFrontFacing
+        ? (rawHandedness === 'Left' ? 'Right' : rawHandedness === 'Right' ? 'Left' : 'Unknown')
+        : ((rawHandedness as 'Left' | 'Right') || 'Unknown');
+
       const score = handednessCategory?.score || 0.9;
 
       detectedHands.push({
@@ -83,3 +95,4 @@ export function extractLandmarksFromVideo(
     return [];
   }
 }
+

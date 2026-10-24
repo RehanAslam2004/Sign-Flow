@@ -1,8 +1,8 @@
 {
   "dataset": "Bakhtyar12/Pakistani-Sign-Language",
   "total_samples": 22320,
-  "train_samples": 17856,
-  "test_samples": 4464,
+  "train_samples": 17855,
+  "test_samples": 4465,
   "num_classes": 89,
   "classes": [
     "APPLE",
@@ -97,33 +97,33 @@
   ],
   "tournament_results": {
     "RandomForest": {
-      "test_accuracy": 0.9890232974910395,
-      "macro_f1": 0.9890030940426715,
-      "top3_accuracy": 0.9975358422939068,
-      "train_time_sec": 15.21,
-      "latency_us_per_sample": 63.2
+      "test_accuracy": 0.987010078387458,
+      "macro_f1": 0.9877561410801337,
+      "top3_accuracy": 0.9979843225083986,
+      "train_time_sec": 14.15,
+      "latency_us_per_sample": 67.5
     },
     "MLPClassifier": {
-      "test_accuracy": 0.9858870967741935,
-      "macro_f1": 0.9858548262082201,
-      "top3_accuracy": 0.9979838709677419,
-      "train_time_sec": 42.81,
-      "latency_us_per_sample": 4.8
+      "test_accuracy": 0.9858902575587906,
+      "macro_f1": 0.9863018779525806,
+      "top3_accuracy": 0.9973124300111982,
+      "train_time_sec": 48.29,
+      "latency_us_per_sample": 6.4
     },
     "LinearSVM": {
-      "test_accuracy": 0.985663082437276,
-      "macro_f1": 0.9856510571403891,
-      "top3_accuracy": 0.996415770609319,
-      "train_time_sec": 51.46,
-      "latency_us_per_sample": 27.3
+      "test_accuracy": 0.9843225083986562,
+      "macro_f1": 0.9838725279051812,
+      "top3_accuracy": 0.9966405375139977,
+      "train_time_sec": 30.55,
+      "latency_us_per_sample": 26.6
     }
   },
   "champion": "RandomForest",
   "champion_metrics": {
-    "test_accuracy": 0.9890232974910395,
-    "macro_f1": 0.9890030940426715,
-    "top3_accuracy": 0.9975358422939068,
-    "train_time_sec": 15.21,
-    "latency_us_per_sample": 63.2
+    "test_accuracy": 0.987010078387458,
+    "macro_f1": 0.9877561410801337,
+    "top3_accuracy": 0.9979843225083986,
+    "train_time_sec": 14.15,
+    "latency_us_per_sample": 67.5
   }
 }

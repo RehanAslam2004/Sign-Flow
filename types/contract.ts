@@ -15,10 +15,10 @@ export interface DetectedHand {
   landmarks: LandmarkPoint[]; // 21 MediaPipe hand landmarks in order
 }
 
-export type SignLanguageMode = 'unified' | 'psl_extended' | 'psl_words' | 'psl_alphabets' | 'asl';
+export type SignLanguageMode = 'unified' | 'psl_extended' | 'psl_words' | 'psl_alphabets' | 'asl' | 'asl_continuous';
 
 export interface FramePayload {
-  schema_version: '1.0';
+  schema_version: '1.0' | '2.0';
   session_id: string;
   frame_id: number;
   timestamp: number;
@@ -27,6 +27,11 @@ export interface FramePayload {
   hands_detected: number;
   hands: DetectedHand[];
   language?: SignLanguageMode;
+  // Gemini temporal frame extensions
+  image_data?: string; // Base64 JPEG frame for multimodal sequence analysis
+  is_boundary_pause?: boolean;
+  context_sentence?: string;
+  sequence_id?: string;
 }
 
 export type RecognitionStatus =
@@ -34,7 +39,10 @@ export type RecognitionStatus =
   | 'candidate'
   | 'uncertain'
   | 'no_hands'
-  | 'error';
+  | 'error'
+  | 'buffering'
+  | 'partial'
+  | 'complete';
 
 export interface PredictionCandidate {
   sign: string;
@@ -42,7 +50,7 @@ export interface PredictionCandidate {
 }
 
 export interface PredictionEvent {
-  schema_version: '1.0';
+  schema_version: '1.0' | '2.0';
   session_id: string;
   frame_id: number;
   timestamp: number;
@@ -52,6 +60,17 @@ export interface PredictionEvent {
   is_candidate: boolean;
   message?: string | null;
   language?: SignLanguageMode | string;
+  // Gemini temporal interpretation fields:
+  recognized_text?: string;
+  sequence_id?: string;
+  alternatives?: string[];
+  uncertainty_reason?: string | null;
+  observations?: string[];
+  start_timestamp_ms?: number;
+  end_timestamp_ms?: number;
+  backend?: string;
+  model?: string;
+  buffered_frames?: number;
   // Enhanced reliability & diagnostics fields:
   margin?: number;
   top_candidates?: PredictionCandidate[];
@@ -60,6 +79,7 @@ export interface PredictionEvent {
   handedness?: string;
   inference_latency_ms?: number;
 }
+
 
 export interface FeedbackSample {
   sample_id: string;

@@ -17,6 +17,7 @@ import { FramePayload, SignLanguageMode, PredictionCandidate } from '@/types/con
 import { initHandLandmarker, extractLandmarksFromVideo } from '@/lib/mediapipe';
 import { SignFlowWebSocketClient, ConnectionStatus } from '@/lib/websocketClient';
 import { RecognitionStateMachine, DiagnosticsSnapshot } from '@/lib/stateMachine';
+import { TranscriptManager } from '@/lib/transcriptManager';
 import { speechEngine } from '@/lib/speech';
 import { CONFIG } from '@/lib/config';
 import { getSuggestedRepliesForText } from '@/lib/replyCatalogue';
@@ -35,6 +36,11 @@ function generateSessionId(): string {
 export default function SignFlowHome() {
   const [mode, setMode] = useState<UsageMode>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const facingModeRef = useRef<'user' | 'environment'>(facingMode);
+
+  useEffect(() => {
+    facingModeRef.current = facingMode;
+  }, [facingMode]);
 
   // Unified Sign Recognition Engine (interprets PSL, ASL, and 3D pointing automatically)
   const [selectedLanguage, setSelectedLanguage] = useState<SignLanguageMode>('unified');
@@ -65,8 +71,20 @@ export default function SignFlowHome() {
   const [lastConfirmedSign, setLastConfirmedSign] = useState<string | null>(null);
   const [handsDetected, setHandsDetected] = useState<boolean>(false);
   const [autoSpeechEnabled, setAutoSpeechEnabled] = useState<boolean>(true);
+  const autoSpeechEnabledRef = useRef<boolean>(autoSpeechEnabled);
+
+  useEffect(() => {
+    autoSpeechEnabledRef.current = autoSpeechEnabled;
+  }, [autoSpeechEnabled]);
+
   const [activeUtterance, setActiveUtterance] = useState<string[]>([]);
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
+
+  // Two-tier continuous recognition state (Gemini API)
+  const [provisionalText, setProvisionalText] = useState<string | null>(null);
+  const [geminiModel, setGeminiModel] = useState<string>('gemini-2.0-flash');
+  const [latestSequenceId, setLatestSequenceId] = useState<string | number | undefined>(undefined);
+  const [latestUncertainty, setLatestUncertainty] = useState<string | null | undefined>(undefined);
 
   // Suggested Sign Reply state (exclusively active for 'partner' mode)
   const [activeGhostHandReply, setActiveGhostHandReply] = useState<SuggestedReply | null>(null);
@@ -96,6 +114,11 @@ export default function SignFlowHome() {
   const landmarkerRef = useRef<any>(null);
   const wsClientRef = useRef<SignFlowWebSocketClient | null>(null);
   const stateMachineRef = useRef<RecognitionStateMachine | null>(null);
+  const transcriptManagerRef = useRef<TranscriptManager | null>(null);
+  const offscreenCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastConfirmedSentenceRef = useRef<string | null>(null);
+  const lastHandsSeenTimeRef = useRef<number>(0);
+  const hadHandsRef = useRef<boolean>(false);
   const animationFrameIdRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
   const frameCounterRef = useRef<number>(0);
@@ -112,11 +135,10 @@ export default function SignFlowHome() {
     setActiveGhostHandReply(null);
   }, []);
 
-  // 1. Initialize State Machine
+  // 1. Initialize State Machine and Transcript Manager
   useEffect(() => {
     stateMachineRef.current = new RecognitionStateMachine({
       onCandidatePreview: (sign, confidence, eventSessionId) => {
-        // Discard any candidate from ended or mismatched session
         if (
           !isSessionActiveRef.current ||
           (eventSessionId && eventSessionId !== sessionIdRef.current)
@@ -127,7 +149,6 @@ export default function SignFlowHome() {
         setCandidateConfidence(confidence);
       },
       onSignConfirmed: (sign, eventSessionId) => {
-        // Discard any confirmed sign from ended or mismatched session
         if (
           !isSessionActiveRef.current ||
           (eventSessionId && eventSessionId !== sessionIdRef.current)
@@ -138,7 +159,6 @@ export default function SignFlowHome() {
         setActiveUtterance((prev) => [...prev, sign]);
       },
       onUtteranceComplete: (phrase, rawTokens, eventSessionId) => {
-        // Discard completed utterance from ended or mismatched session
         if (
           !isSessionActiveRef.current ||
           (eventSessionId && eventSessionId !== sessionIdRef.current)
@@ -146,16 +166,14 @@ export default function SignFlowHome() {
           return;
         }
 
-        // Format phrase through the bilingual sentence grammar engine
         const confidences = stateMachineRef.current?.getActiveConfidences() || [];
         const formatted = formatSentence(rawTokens, selectedLanguageRef.current, confidences);
 
-        // Add enriched bilingual message to transcript
         const newMessage: ConversationMessage = {
           id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           text: formatted.englishSentence || formatted.rawDisplay || phrase,
           timestamp: Date.now(),
-          spoken: autoSpeechEnabled,
+          spoken: autoSpeechEnabledRef.current,
           rawTokens: formatted.rawTokens,
           rawDisplay: formatted.rawDisplay,
           urduSentence: formatted.urduSentence,
@@ -166,16 +184,13 @@ export default function SignFlowHome() {
         setMessages((prev) => [newMessage, ...prev]);
         setActiveUtterance([]);
 
-        // Speak aloud using optimized spoken text (English for reliable browser TTS)
-        if (autoSpeechEnabled) {
+        if (autoSpeechEnabledRef.current) {
           speechEngine.speak(formatted.spokenText || formatted.englishSentence || phrase, eventSessionId);
         }
 
-        // Automatic AR Ghost Hand Guide: strictly for 'partner' mode
         if (modeRef.current === 'partner') {
           const queryText = formatted.englishSentence || phrase;
           const replies = getSuggestedRepliesForText(queryText);
-          // Automatically select best contextually appropriate verified reply
           if (replies.length > 0 && replies[0].reference) {
             setActiveGhostHandReply({
               ...replies[0],
@@ -199,10 +214,53 @@ export default function SignFlowHome() {
       },
     }, sessionIdRef.current || undefined);
 
+    transcriptManagerRef.current = new TranscriptManager({
+      onProvisionalUpdate: (prov) => {
+        if (!isSessionActiveRef.current) return;
+        setProvisionalText(prov);
+      },
+      onSentenceConfirmed: (sentence, alternatives) => {
+        if (!isSessionActiveRef.current) return;
+        lastConfirmedSentenceRef.current = sentence;
+        const newMessage: ConversationMessage = {
+          id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          text: sentence,
+          timestamp: Date.now(),
+          spoken: autoSpeechEnabledRef.current,
+          englishSentence: sentence,
+          alternatives: alternatives,
+        };
+        setMessages((prev) => [newMessage, ...prev]);
+
+        if (autoSpeechEnabledRef.current) {
+          speechEngine.speak(sentence, sessionIdRef.current || undefined);
+        }
+
+        if (modeRef.current === 'partner') {
+          const replies = getSuggestedRepliesForText(sentence);
+          if (replies.length > 0 && replies[0].reference) {
+            setActiveGhostHandReply({
+              ...replies[0],
+              id: `${replies[0].id}_${Date.now()}`,
+            });
+          } else {
+            setActiveGhostHandReply(null);
+          }
+        } else {
+          setActiveGhostHandReply(null);
+        }
+      },
+      onStatusChange: (status) => {
+        if (!isSessionActiveRef.current) return;
+        setStatusText(status);
+      },
+    }, sessionIdRef.current || undefined);
+
     return () => {
       stateMachineRef.current?.reset();
+      transcriptManagerRef.current?.reset();
     };
-  }, [autoSpeechEnabled]);
+  }, []);
 
   // 2. Initialize MediaPipe & WebSocket when in active mode with active session ID
   useEffect(() => {
@@ -244,10 +302,21 @@ export default function SignFlowHome() {
           return;
         }
 
+        if (prediction.model) setGeminiModel(prediction.model);
+        if (prediction.sequence_id !== undefined) setLatestSequenceId(prediction.sequence_id);
+        if (prediction.uncertainty_reason !== undefined) setLatestUncertainty(prediction.uncertainty_reason);
         if (prediction.margin !== undefined) setLatestMargin(prediction.margin);
         if (prediction.top_candidates) setLatestTopCandidates(prediction.top_candidates);
         if (prediction.handedness) setLatestHandedness(prediction.handedness);
         if (prediction.hands_count !== undefined) setLatestHandsCount(prediction.hands_count);
+
+        if (prediction.sign) {
+          setCandidateSign(prediction.sign);
+          setCandidateConfidence(prediction.confidence || 0.9);
+        }
+
+        // Two-tier continuous interpretation manager (Gemini continuous ASL)
+        transcriptManagerRef.current?.processPrediction(prediction);
 
         stateMachineRef.current?.processPrediction(prediction);
         setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
@@ -257,8 +326,6 @@ export default function SignFlowHome() {
           if (status === 'connected') {
             setServiceStatus('connected');
           } else if (status === 'disconnected') {
-            // When remote WebSocket is disconnected (e.g. standalone Vercel hosting),
-            // seamlessly transition to the high-performance in-browser AI engine
             setServiceStatus('edge_active');
           } else {
             setServiceStatus(status);
@@ -280,7 +347,7 @@ export default function SignFlowHome() {
     };
   }, [mode, currentSessionId]);
 
-  // 3. Real-time Video Landmark Processing Loop
+  // 3. Real-time Video Landmark Processing and Frame Streaming Loop
   const processVideoFrame = useCallback(() => {
     const video = videoElementRef.current;
     const landmarker = landmarkerRef.current;
@@ -294,43 +361,79 @@ export default function SignFlowHome() {
 
     if (video && video.readyState >= 2 && landmarker && wsClient) {
       const now = performance.now();
-      const throttleInterval = 1000 / CONFIG.TARGET_FPS;
+      // ~5 FPS for frame transmission to backend Gemini buffer (200ms throttle interval)
+      const throttleInterval = 200;
 
       if (now - lastFrameTimeRef.current >= throttleInterval) {
         lastFrameTimeRef.current = now;
         frameCounterRef.current += 1;
 
-        // Extract raw 21 landmarks in browser
-        const hands = extractLandmarksFromVideo(landmarker, video, now);
+        // Extract raw landmarks in browser with camera perspective awareness
+        const isFrontFacing = facingModeRef.current === 'user';
+        const hands = extractLandmarksFromVideo(landmarker, video, now, isFrontFacing);
         const hasHands = hands.length > 0;
+
         setHandsDetected(hasHands);
 
-        // Send payload over WebSocket with active session ID
-        const payload: FramePayload = {
-          schema_version: '1.0',
-          session_id: activeSession,
-          frame_id: frameCounterRef.current,
-          timestamp: Date.now(),
-          image_width: video.videoWidth || 1280,
-          image_height: video.videoHeight || 720,
-          hands_detected: hands.length,
-          hands: hands,
-          language: selectedLanguageRef.current,
-        };
+        let jpegBase64: string | undefined = undefined;
+        let isBoundaryPause = false;
 
-        const sent = wsClient.sendFrame(payload);
-        if (!sent) {
-          // If remote WebSocket is offline or not running (e.g. Vercel deployment),
-          // run instantaneous in-browser landmark normalization and PSL classification
-          const localPrediction = runClientInference(payload);
-          if (localPrediction.margin !== undefined) setLatestMargin(localPrediction.margin);
-          if (localPrediction.top_candidates) setLatestTopCandidates(localPrediction.top_candidates);
-          if (localPrediction.handedness) setLatestHandedness(localPrediction.handedness);
-          if (localPrediction.hands_count !== undefined) setLatestHandsCount(localPrediction.hands_count);
+        if (hasHands) {
+          lastHandsSeenTimeRef.current = now;
+          hadHandsRef.current = true;
 
-          stateMachineRef.current?.processPrediction(localPrediction);
-          setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
-          setServiceStatus((prev) => (prev === 'connected' ? prev : 'edge_active'));
+          // Draw video to offscreen 640x360 canvas for lightweight JPEG frame
+          if (!offscreenCanvasRef.current) {
+            offscreenCanvasRef.current = document.createElement('canvas');
+            offscreenCanvasRef.current.width = 640;
+            offscreenCanvasRef.current.height = 360;
+          }
+          const canvas = offscreenCanvasRef.current;
+          const ctx = canvas.getContext('2d');
+          if (ctx && video.videoWidth > 0 && video.videoHeight > 0) {
+            ctx.drawImage(video, 0, 0, 640, 360);
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.65);
+            jpegBase64 = dataUrl.split(',')[1] || dataUrl;
+          }
+        } else if (hadHandsRef.current) {
+          // Detect hand pause/drop (>800ms) to trigger boundary commit
+          if (now - lastHandsSeenTimeRef.current >= 800) {
+            isBoundaryPause = true;
+            hadHandsRef.current = false;
+            transcriptManagerRef.current?.handleBoundaryPause();
+          }
+        }
+
+        // Transmit frame over WebSocket when hands are present or boundary pause occurs
+        if (hasHands || isBoundaryPause) {
+          const payload: FramePayload = {
+            schema_version: '2.0',
+            session_id: activeSession,
+            frame_id: frameCounterRef.current,
+            timestamp: Date.now(),
+            image_width: 640,
+            image_height: 360,
+            hands_detected: hands.length,
+            hands: hands,
+            language: 'asl_continuous',
+            image_data: jpegBase64,
+            is_boundary_pause: isBoundaryPause,
+            context_sentence: lastConfirmedSentenceRef.current || undefined,
+          };
+
+          const sent = wsClient.sendFrame(payload);
+          if (!sent) {
+            // Fallback client inference if websocket disconnected
+            const localPrediction = runClientInference(payload);
+            if (localPrediction.margin !== undefined) setLatestMargin(localPrediction.margin);
+            if (localPrediction.top_candidates) setLatestTopCandidates(localPrediction.top_candidates);
+            if (localPrediction.handedness) setLatestHandedness(localPrediction.handedness);
+            if (localPrediction.hands_count !== undefined) setLatestHandsCount(localPrediction.hands_count);
+
+            stateMachineRef.current?.processPrediction(localPrediction);
+            setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
+            setServiceStatus((prev) => (prev === 'connected' ? prev : 'edge_active'));
+          }
         }
       }
     }
@@ -369,13 +472,18 @@ export default function SignFlowHome() {
       setCandidateSign(null);
       setCandidateConfidence(0);
       setLastConfirmedSign(null);
+      setProvisionalText(null);
+      lastConfirmedSentenceRef.current = null;
+      hadHandsRef.current = false;
+      lastHandsSeenTimeRef.current = 0;
       setHandsDetected(false);
       setStatusText('Ready to sign');
       frameCounterRef.current = 0;
       lastFrameTimeRef.current = 0;
 
-      // 3. Reset state machine and speech engine to new session
+      // 3. Reset state machine, transcript manager, and speech engine to new session
       stateMachineRef.current?.reset(newSessionId);
+      transcriptManagerRef.current?.setSessionId(newSessionId);
       speechEngine.setActiveSessionId(newSessionId);
       speechEngine.cancel();
 
@@ -405,8 +513,9 @@ export default function SignFlowHome() {
     speechEngine.setActiveSessionId(null);
     speechEngine.cancel();
 
-    // 4. Reset state machine and clear all timers
+    // 4. Reset state machine, transcript manager, and clear all timers
     stateMachineRef.current?.reset();
+    transcriptManagerRef.current?.reset();
 
     // 5. Notify backend and disconnect WebSocket cleanly
     if (wsClientRef.current) {
@@ -426,6 +535,9 @@ export default function SignFlowHome() {
     setCandidateSign(null);
     setCandidateConfidence(0);
     setLastConfirmedSign(null);
+    setProvisionalText(null);
+    lastConfirmedSentenceRef.current = null;
+    hadHandsRef.current = false;
     setHandsDetected(false);
     setStatusText('Ready to sign');
     setServiceStatus('disconnected');
@@ -441,7 +553,10 @@ export default function SignFlowHome() {
   const handleClearTranscript = useCallback(() => {
     setMessages([]);
     setActiveUtterance([]);
+    setProvisionalText(null);
+    lastConfirmedSentenceRef.current = null;
     stateMachineRef.current?.reset(sessionIdRef.current || undefined);
+    transcriptManagerRef.current?.reset();
     clearSuggestedRepliesState();
   }, [clearSuggestedRepliesState]);
 
@@ -450,8 +565,26 @@ export default function SignFlowHome() {
   };
 
   const handleFinishAndSpeak = () => {
-    stateMachineRef.current?.finishUtterance();
+    if (provisionalText) {
+      transcriptManagerRef.current?.handleBoundaryPause();
+    } else {
+      stateMachineRef.current?.finishUtterance();
+    }
   };
+
+  const handleEditMessage = useCallback((id: string, newText: string) => {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === id
+          ? {
+              ...msg,
+              text: newText,
+              englishSentence: newText,
+            }
+          : msg
+      )
+    );
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-800">
@@ -467,18 +600,18 @@ export default function SignFlowHome() {
                 SignFlow
               </span>
               <span className="hidden md:inline-block ml-2 text-xs text-slate-500 font-medium border-l border-slate-200 pl-2">
-                Pakistan Sign Language Bridge
+                Translate signs. Bridge conversations.
               </span>
             </div>
           </div>
 
           {mode !== null && (
             <div className="flex items-center gap-2 shrink-0">
-              {/* Unified Recognition Experience Badge */}
+              {/* Gemini Continuous ASL Badge */}
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/80 text-xs font-semibold text-slate-800 shadow-2xs">
                 <span className="w-2 h-2 rounded-full bg-[#068D9D] animate-pulse" aria-hidden="true" />
-                <span>SignFlow Universal</span>
-                <span className="hidden md:inline text-[11px] font-normal text-slate-500">• Auto Interpreting</span>
+                <span>Gemini ASL Continuous</span>
+                <span className="hidden md:inline text-[11px] font-normal text-slate-500">• Flash 2.0</span>
               </div>
 
               {/* Diagnostics HUD Toggle */}
@@ -558,7 +691,7 @@ export default function SignFlowHome() {
                   mode={mode}
                   onVideoReady={handleVideoReady}
                   statusText={statusText}
-                  isRecognizing={candidateSign !== null}
+                  isRecognizing={candidateSign !== null || Boolean(provisionalText)}
                   handsDetected={handsDetected}
                   facingMode={facingMode}
                   onToggleFacingMode={handleToggleFacingMode}
@@ -629,7 +762,19 @@ export default function SignFlowHome() {
                         </div>
                       </div>
 
-                      {activeUtterance.length > 0 ? (
+                      {provisionalText ? (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-1.5 text-xs text-teal-600 font-medium">
+                            <span className="w-2 h-2 rounded-full bg-[#068D9D] animate-ping" />
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-[#068D9D]">
+                              Continuous ASL Signing:
+                            </span>
+                          </div>
+                          <p className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-wide break-words pt-0.5">
+                            "{provisionalText}"
+                          </p>
+                        </div>
+                      ) : activeUtterance.length > 0 ? (
                         (() => {
                           const preview = formatPreview(activeUtterance, selectedLanguage);
                           const hasUrdu = Boolean(preview.previewUrdu && preview.previewUrdu.trim().length > 0);
@@ -668,13 +813,7 @@ export default function SignFlowHome() {
                       ) : (
                         <p className="text-slate-500 text-xs sm:text-sm leading-relaxed">
                           {handsDetected
-                            ? selectedLanguage === 'psl_extended'
-                              ? 'Ready — perform a PSL sign (e.g. Assalamulaikum, Barai Mehrbani, G Han, Alif)...'
-                              : selectedLanguage === 'psl_words'
-                              ? 'Ready — perform a PSL conversational sign (e.g. THANKS, EAT, GOOD)...'
-                              : selectedLanguage === 'psl_alphabets'
-                              ? 'Ready — sign an Urdu alphabet letter (e.g. ا, ب, ج)...'
-                              : 'Ready — perform an ASL sign or fingerspell a letter/number...'
+                            ? 'Ready — sign naturally in American Sign Language...'
                             : 'Position hands in the camera frame to start signing...'}
                         </p>
                       )}
@@ -685,9 +824,9 @@ export default function SignFlowHome() {
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
                     <button
                       onClick={handleFinishAndSpeak}
-                      disabled={activeUtterance.length === 0}
+                      disabled={!provisionalText && activeUtterance.length === 0}
                       className={`min-h-[48px] flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all focus-visible:ring-2 focus-visible:ring-[#068D9D] ${
-                        activeUtterance.length > 0
+                        provisionalText || activeUtterance.length > 0
                           ? 'bg-[#068D9D] hover:bg-[#05707d] text-white shadow-sm active:scale-[0.99]'
                           : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                       }`}
@@ -714,8 +853,9 @@ export default function SignFlowHome() {
                 <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-sm flex-1 min-h-[260px] sm:min-h-[320px]">
                   <TranscriptView
                     messages={messages}
+                    provisionalText={provisionalText}
+                    onEditMessage={handleEditMessage}
                     onReplay={(text) => {
-                      // Normalize any bracketed romanizations before TTS playback
                       const cleanSpoken = text
                         .split(' ')
                         .map((tok) => {
@@ -744,6 +884,9 @@ export default function SignFlowHome() {
               rawMargin={latestMargin}
               selectedLanguage={selectedLanguage}
               onFlagSample={() => setIsFeedbackModalOpen(true)}
+              geminiModel={geminiModel}
+              sequenceId={latestSequenceId}
+              uncertaintyReason={latestUncertainty}
             />
 
             {/* Failure Sample Feedback Modal */}

@@ -24,7 +24,9 @@ export interface ClientPredictionResult {
   rejection_reason?: string | null;
   top_candidates?: PredictionCandidate[];
   gesture_type?: string | null;
+  language?: string;
 }
+
 
 /**
  * Normalizes 21 MediaPipe hand landmarks identically to preprocessing.py:
@@ -43,14 +45,13 @@ export function normalizeClientLandmarks(
     throw new Error(`Expected 21 landmarks, received ${landmarks?.length || 0}`);
   }
 
-  const aspectRatio = imageWidth / Math.max(imageHeight, 1);
-
-  // Aspect-ratio corrected coords: shape (21, 3)
+  // Canonical normalized coords without aspect ratio distortion: shape (21, 3)
   const coords: [number, number, number][] = landmarks.map((pt) => [
-    pt.x * aspectRatio,
+    pt.x,
     pt.y,
     pt.z,
   ]);
+
 
   // 1. Wrist-centering (landmark 0)
   const wrist = coords[0];
@@ -149,26 +150,29 @@ export function classifyHandFeatures(
     const pointing = analyzePointingLandmarks(rawLandmarks, handedness);
     if (pointing.isPointing && pointing.candidatePSL) {
       const pSign = pointing.gestureType === 'point_up' ? 'HELP' : pointing.candidatePSL;
+      const pointingConf = Math.min(0.72, Math.max(0.60, Number(pointing.confidence.toFixed(2))));
+      const pointingMargin = Math.min(0.25, Math.max(0.12, Number(pointing.margin.toFixed(2))));
       const topCands: PredictionCandidate[] = [
-        { sign: pSign, confidence: pointing.confidence },
+        { sign: pSign, confidence: pointingConf },
       ];
       if (pointing.candidateEN && pointing.candidateEN !== pSign) {
-        topCands.push({ sign: pointing.candidateEN, confidence: Number((pointing.confidence * 0.95).toFixed(3)) });
+        topCands.push({ sign: pointing.candidateEN, confidence: Number((pointingConf * 0.95).toFixed(3)) });
       }
       if (pointing.candidatePSL && pointing.candidatePSL !== pSign) {
-        topCands.push({ sign: pointing.candidatePSL, confidence: Number((pointing.confidence * 0.92).toFixed(3)) });
+        topCands.push({ sign: pointing.candidatePSL, confidence: Number((pointingConf * 0.92).toFixed(3)) });
       }
 
       return {
-        status: pointing.confidence >= 0.65 && pointing.margin >= 0.12 ? 'recognized' : 'candidate',
+        status: pointingConf >= 0.65 && pointingMargin >= 0.12 ? 'recognized' : 'candidate',
         sign: pSign,
-        confidence: pointing.confidence,
-        margin: pointing.margin,
+        confidence: pointingConf,
+        margin: pointingMargin,
         is_candidate: true,
         message: null,
         rejection_reason: null,
         top_candidates: topCands,
         gesture_type: pointing.gestureType,
+        language: 'heuristic',
       };
     }
   }
@@ -176,6 +180,7 @@ export function classifyHandFeatures(
   const coords = normalizedCoords;
 
   // Finger extension checks (in normalized coords, negative y is higher in camera image):
+  // Post-chirality flip, all hands are aligned to right-hand manifold where thumb extends toward +X.
   const thumbExt = coords[4][0] > coords[3][0];
   const indexExt = coords[8][1] < coords[6][1];
   const middleExt = coords[12][1] < coords[10][1];
@@ -193,43 +198,46 @@ export function classifyHandFeatures(
     return {
       status: 'recognized',
       sign: 'HELLO',
-      confidence: 0.92,
-      margin: 0.35,
+      confidence: 0.72,
+      margin: 0.25,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'HELLO', confidence: 0.92 },
-        { sign: 'WATER', confidence: 0.57 },
+        { sign: 'HELLO', confidence: 0.72 },
+        { sign: 'WATER', confidence: 0.45 },
         { sign: 'YES', confidence: 0.12 },
       ],
+      language: 'heuristic',
     };
   } else if (extendedCount === 0 && !thumbExt) {
     return {
       status: 'recognized',
       sign: 'STOP',
-      confidence: 0.88,
-      margin: 0.40,
+      confidence: 0.70,
+      margin: 0.25,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'STOP', confidence: 0.88 },
-        { sign: 'YES', confidence: 0.48 },
+        { sign: 'STOP', confidence: 0.70 },
+        { sign: 'YES', confidence: 0.45 },
         { sign: 'HELP', confidence: 0.15 },
       ],
+      language: 'heuristic',
     };
   } else if (extendedCount === 0 && thumbExt) {
     return {
       status: 'recognized',
       sign: 'YES',
-      confidence: 0.89,
-      margin: 0.38,
+      confidence: 0.70,
+      margin: 0.25,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'YES', confidence: 0.89 },
-        { sign: 'STOP', confidence: 0.51 },
+        { sign: 'YES', confidence: 0.70 },
+        { sign: 'STOP', confidence: 0.45 },
         { sign: 'HELLO', confidence: 0.10 },
       ],
+      language: 'heuristic',
     };
   } else if (indexExt && !middleExt && !ringExt && !pinkyExt) {
     // Kinematic index pointing evaluation from normalized coordinates
@@ -238,78 +246,83 @@ export function classifyHandFeatures(
       return {
         status: 'recognized',
         sign: 'Ap',
-        confidence: 0.90,
-        margin: 0.38,
+        confidence: 0.68,
+        margin: 0.22,
         is_candidate: true,
         message: null,
         top_candidates: [
-          { sign: 'Ap', confidence: 0.90 },
-          { sign: 'YOU', confidence: 0.86 },
+          { sign: 'Ap', confidence: 0.68 },
+          { sign: 'YOU', confidence: 0.64 },
           { sign: 'HELP', confidence: 0.20 },
         ],
         gesture_type: 'point_addressee',
+        language: 'heuristic',
       };
     } else if (indexDz > 0.10 || (indexDy > 0.30 && indexDz > -0.05)) {
       // Pointing toward self / torso (ME / Mujhay)
       return {
         status: 'recognized',
         sign: 'Mujhay',
-        confidence: 0.90,
-        margin: 0.38,
+        confidence: 0.68,
+        margin: 0.22,
         is_candidate: true,
         message: null,
         top_candidates: [
-          { sign: 'Mujhay', confidence: 0.90 },
-          { sign: 'ME', confidence: 0.86 },
+          { sign: 'Mujhay', confidence: 0.68 },
+          { sign: 'ME', confidence: 0.64 },
           { sign: 'HELP', confidence: 0.20 },
         ],
         gesture_type: 'point_self',
+        language: 'heuristic',
       };
     } else {
       // Pointing upward (HELP / Alif)
       return {
         status: 'recognized',
         sign: 'HELP',
-        confidence: 0.86,
-        margin: 0.32,
+        confidence: 0.68,
+        margin: 0.20,
         is_candidate: true,
         message: null,
         top_candidates: [
-          { sign: 'HELP', confidence: 0.86 },
-          { sign: 'Alif', confidence: 0.82 },
-          { sign: 'WATER', confidence: 0.30 },
+          { sign: 'HELP', confidence: 0.68 },
+          { sign: 'Alif', confidence: 0.62 },
+          { sign: 'WATER', confidence: 0.25 },
         ],
         gesture_type: 'point_up',
+        language: 'heuristic',
       };
     }
   } else if (indexExt && middleExt && ringExt && !pinkyExt) {
     return {
       status: 'recognized',
       sign: 'WATER',
-      confidence: 0.87,
-      margin: 0.30,
+      confidence: 0.68,
+      margin: 0.22,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'WATER', confidence: 0.87 },
-        { sign: 'HELLO', confidence: 0.57 },
-        { sign: 'HELP', confidence: 0.25 },
+        { sign: 'WATER', confidence: 0.68 },
+        { sign: 'HELLO', confidence: 0.45 },
+        { sign: 'HELP', confidence: 0.20 },
       ],
+      language: 'heuristic',
     };
   } else {
     // Ambiguous posture or transition in progress
     return {
       status: 'candidate',
       sign: 'RECOGNIZING',
-      confidence: 0.58,
-      margin: 0.08,
+      confidence: 0.50,
+      margin: 0.05,
       is_candidate: true,
       message: 'Sign candidate in progress',
       rejection_reason: 'ambiguous_margin',
       top_candidates: [
-        { sign: 'RECOGNIZING', confidence: 0.58 },
-        { sign: 'UNCERTAIN', confidence: 0.50 },
+        { sign: 'RECOGNIZING', confidence: 0.50 },
+        { sign: 'UNCERTAIN', confidence: 0.45 },
       ],
+      language: 'heuristic',
     };
   }
 }
@@ -336,6 +349,7 @@ export function runClientInference(payload: FramePayload): PredictionEvent {
       message: 'No hands detected in frame',
       rejection_reason: 'no_hands',
       hands_count: 0,
+      language: 'heuristic',
     };
   }
 
@@ -355,6 +369,7 @@ export function runClientInference(payload: FramePayload): PredictionEvent {
       rejection_reason: 'tracking_loss',
       hands_count: handsCount,
       handedness: primaryHand.handedness,
+      language: 'heuristic',
     };
   }
 
@@ -387,7 +402,9 @@ export function runClientInference(payload: FramePayload): PredictionEvent {
       top_candidates: result.top_candidates,
       hands_count: handsCount,
       handedness: primaryHand.handedness,
+      language: result.language || 'heuristic',
     };
+
   } catch (err: any) {
     return {
       schema_version: '1.0',
