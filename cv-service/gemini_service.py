@@ -57,25 +57,28 @@ class ASLInterpretationResponse(BaseModel):
 
 
 ASL_SYSTEM_INSTRUCTION = """You are SignFlow's expert American Sign Language (ASL) interpreter.
-Your task is to observe a chronological sequence of timestamped video frames captured from a user's webcam and translate continuous ASL into natural, fluent English sentences.
+Your task is to observe a chronological sequence of timestamped video frames captured from a user's webcam and translate ASL into natural, fluent English sentences.
 
 Linguistic and Recognition Directives:
-1. Interpret the visual motion strictly as American Sign Language (ASL), taking into account:
-   - Handshapes, palm orientations, movement trajectories, and spatial locations.
-   - Non-manual markers (facial expressions, head nods/shakes, mouth morphemes, eyebrow raises/lowering) and body shifts.
-   - Two-handed interaction and continuous sign transitions.
-2. Translate the full continuous signing into coherent English sentences rather than emitting a disjointed list of glosses or isolated words.
-3. Distinguish between actual signing and idle movement (resting hands, scratching, adjusting camera).
-4. If the observed motion is ambiguous, incomplete, or out of frame, set status to "uncertain" and provide a descriptive uncertainty_reason.
-5. NEVER fabricate or hallucinate words or assume pointing gestures simply mean "I" or "you" without supporting context.
-6. Return your response strictly conforming to the requested JSON schema.
+1. Support both continuous dynamic signing AND static or held signs/fingerspelling:
+   - Dynamic continuous signing (sentences, multi-sign phrases, compound signs).
+   - Conversational signs: "HELLO", "THANK YOU", "PLEASE", "YES", "NO", "GOOD", "HELP", "I LOVE YOU", "WATER", "NAME", "NICE TO MEET YOU".
+   - Deictic pointing: Index finger pointing directly forward at camera -> "You" / "Your"; index finger pointing toward chest/self -> "I" / "Me" / "My"; downward pointing -> "This" / "Here".
+   - Static letters, numbers, and fingerspelled words held steady in frame.
+2. Carefully evaluate:
+   - Handshapes, finger extensions, palm orientations, locations relative to body/face, and movement trajectories.
+   - Non-manual markers (facial expressions, mouth morphemes, eyebrow movements, head nods/shakes).
+   - One-handed and two-handed interactions.
+3. Formulate natural, coherent English sentences from recognized signs rather than emitting disjointed glosses.
+4. Only classify as "uncertain" if the person is clearly not signing (e.g. resting hands on desk, adjusting camera, scratching nose, completely off screen, or random non-sign motion). If the user is actively posing or signing, translate their intended sign or phrase.
+5. Provide concise observations and confidence rating adhering strictly to the response schema.
 """
 
 
 class GeminiASLService:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-flash-latest").strip()
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest").strip()
         max_concurrent = int(os.getenv("MAX_CONCURRENT_GEMINI_REQUESTS", "2"))
         self.semaphore = asyncio.Semaphore(max_concurrent)
 
@@ -141,9 +144,9 @@ class GeminiASLService:
         # Context prompt
         prompt = (
             f"Analyze these {len(frames)} chronological frames captured from t={start_ts}ms to t={end_ts}ms (duration: {end_ts - start_ts}ms). "
-            f"{'Note: A pause or rest has begun after this window. ' if is_boundary_pause else ''}"
+            f"{'Note: The user paused or completed their thought after this sequence. ' if is_boundary_pause else ''}"
             f"{f'Preceding conversational context: \"{previous_context}\". ' if previous_context else ''}"
-            "Translate the observed continuous ASL signing into natural English sentence text adhering strictly to the response schema."
+            "Translate the observed American Sign Language (ASL) — including continuous sentences, static signs, pointing, or fingerspelling — into natural English text adhering strictly to the response schema."
         )
         contents.append(prompt)
 

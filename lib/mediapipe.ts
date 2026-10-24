@@ -51,7 +51,9 @@ export function extractLandmarksFromVideo(
   timestampMs: number,
   isFrontFacing: boolean = true
 ): DetectedHand[] {
-  if (video.readyState < 2) return [];
+  if (video.readyState < 2 || !video.videoWidth || !video.videoHeight || video.videoWidth === 0) {
+    return [];
+  }
 
   try {
     const result = landmarker.detectForVideo(video, timestampMs);

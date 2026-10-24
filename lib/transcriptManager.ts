@@ -118,9 +118,11 @@ export class TranscriptManager {
           displayStatus = 'Rate limit reached — pausing briefly';
         } else if (raw.includes('timeout')) {
           displayStatus = 'Network timeout — retrying';
+        } else if (raw.includes('static') || raw.includes('ambiguous') || raw.includes('trajectory') || raw.includes('lexical')) {
+          displayStatus = 'Hold sign steady or start signing...';
         } else if (raw.includes('waiting') || raw.includes('analyzing') || raw.includes('retrying')) {
           displayStatus = event.uncertainty_reason;
-        } else if (!raw.includes('{') && !raw.includes('error')) {
+        } else if (!raw.includes('{') && !raw.includes('error') && event.uncertainty_reason.length < 50) {
           displayStatus = event.uncertainty_reason;
         }
         this.callbacks.onStatusChange?.(displayStatus);
