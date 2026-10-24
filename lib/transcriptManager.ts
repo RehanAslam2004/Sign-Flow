@@ -110,7 +110,20 @@ export class TranscriptManager {
     // If model returned uncertain or no recognized text
     if (event.status === 'uncertain' || !text) {
       if (event.uncertainty_reason) {
-        this.callbacks.onStatusChange?.(`Uncertain: ${event.uncertainty_reason}`);
+        const raw = event.uncertainty_reason.toLowerCase();
+        let displayStatus = 'Ready to sign';
+        if (raw.includes('503') || raw.includes('busy') || raw.includes('high demand') || raw.includes('unavailable')) {
+          displayStatus = 'Cloud AI busy — retrying next window';
+        } else if (raw.includes('429') || raw.includes('quota') || raw.includes('rate_limit')) {
+          displayStatus = 'Rate limit reached — pausing briefly';
+        } else if (raw.includes('timeout')) {
+          displayStatus = 'Network timeout — retrying';
+        } else if (raw.includes('waiting') || raw.includes('analyzing') || raw.includes('retrying')) {
+          displayStatus = event.uncertainty_reason;
+        } else if (!raw.includes('{') && !raw.includes('error')) {
+          displayStatus = event.uncertainty_reason;
+        }
+        this.callbacks.onStatusChange?.(displayStatus);
       }
       return;
     }

@@ -147,9 +147,19 @@ class GeminiASLService:
         )
         contents.append(prompt)
 
-        models_to_try = [self.model_name]
-        if "gemini-flash-latest" not in models_to_try:
-            models_to_try.append("gemini-flash-latest")
+        # Resilient model failover pool to eliminate 503 capacity spikes and 404 deprecations
+        model_pool = [
+            self.model_name,
+            "gemini-flash-lite-latest",
+            "gemini-flash-latest",
+            "gemini-3.5-flash-lite",
+            "gemini-3.7-flash",
+        ]
+        # Deduplicate while preserving order
+        models_to_try = []
+        for m in model_pool:
+            if m and m not in models_to_try:
+                models_to_try.append(m)
 
         async with self.semaphore:
             t0 = time.perf_counter()
@@ -177,7 +187,6 @@ class GeminiASLService:
                     # Parse parsed model output
                     if hasattr(response, "parsed") and response.parsed:
                         parsed_res: ASLInterpretationResponse = response.parsed
-                        # Ensure metadata matches this window
                         parsed_res.start_timestamp_ms = start_ts
                         parsed_res.end_timestamp_ms = end_ts
                         parsed_res.sequence_id = sequence_id
@@ -193,23 +202,30 @@ class GeminiASLService:
 
                 except Exception as e:
                     last_err_msg = str(e)
-                    print(f"[GeminiASLService] Model {target_model} error: {last_err_msg}")
-                    if "404" in last_err_msg or "not found" in last_err_msg.lower():
+                    err_lower = last_err_msg.lower()
+                    print(f"[GeminiASLService] Model {target_model} temporary error: {last_err_msg}")
+                    # If model is 503 (high demand), 404 (not found), or 429 (rate limit), failover to next model
+                    if any(c in err_lower for c in ("503", "404", "429", "unavailable", "high demand", "not found")):
                         continue
                     break
 
             latency_ms = round((time.perf_counter() - t0) * 1000, 2)
-            uncertainty_reason = "api_error"
-            if "quota" in last_err_msg.lower() or "429" in last_err_msg:
-                uncertainty_reason = "rate_limit_exceeded"
-            elif "timeout" in last_err_msg.lower():
-                uncertainty_reason = "request_timeout"
+            # Create a calm, user-friendly status message without raw internal JSON
+            err_lower = last_err_msg.lower()
+            if "503" in err_lower or "high demand" in err_lower or "unavailable" in err_lower:
+                user_friendly_reason = "Cloud AI busy — retrying next window"
+            elif "quota" in err_lower or "429" in err_lower:
+                user_friendly_reason = "Rate limit reached — pausing briefly"
+            elif "timeout" in err_lower:
+                user_friendly_reason = "Request timeout — retrying"
+            else:
+                user_friendly_reason = "Analyzing continuous motion..."
 
             return ASLInterpretationResponse(
                 status="uncertain",
                 recognized_text="",
                 alternatives=[],
-                uncertainty_reason=f"{uncertainty_reason}: {last_err_msg[:120]}",
+                uncertainty_reason=user_friendly_reason,
                 observations=[],
                 start_timestamp_ms=start_ts,
                 end_timestamp_ms=end_ts,
