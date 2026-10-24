@@ -82,7 +82,7 @@ export default function SignFlowHome() {
 
   // Two-tier continuous recognition state (Gemini API)
   const [provisionalText, setProvisionalText] = useState<string | null>(null);
-  const [geminiModel, setGeminiModel] = useState<string>('gemini-2.0-flash');
+  const [geminiModel, setGeminiModel] = useState<string>('gemini-flash-latest');
   const [latestSequenceId, setLatestSequenceId] = useState<string | number | undefined>(undefined);
   const [latestUncertainty, setLatestUncertainty] = useState<string | null | undefined>(undefined);
 
@@ -611,7 +611,7 @@ export default function SignFlowHome() {
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/80 text-xs font-semibold text-slate-800 shadow-2xs">
                 <span className="w-2 h-2 rounded-full bg-[#068D9D] animate-pulse" aria-hidden="true" />
                 <span>Gemini ASL Continuous</span>
-                <span className="hidden md:inline text-[11px] font-normal text-slate-500">• Flash 2.0</span>
+                <span className="hidden md:inline text-[11px] font-normal text-slate-500">• Flash Latest</span>
               </div>
 
               {/* Diagnostics HUD Toggle */}

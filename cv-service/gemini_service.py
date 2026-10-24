@@ -75,7 +75,7 @@ Linguistic and Recognition Directives:
 class GeminiASLService:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        self.model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip()
+        self.model_name = os.getenv("GEMINI_MODEL", "gemini-flash-latest").strip()
         max_concurrent = int(os.getenv("MAX_CONCURRENT_GEMINI_REQUESTS", "2"))
         self.semaphore = asyncio.Semaphore(max_concurrent)
 
@@ -100,7 +100,7 @@ class GeminiASLService:
         is_boundary_pause: bool = False,
     ) -> ASLInterpretationResponse:
         """
-        Translates a temporal window of frames using Gemini 2.0 Flash with structured output.
+        Translates a temporal window of frames using Gemini Flash with structured output.
         """
         if not self.is_configured():
             return ASLInterpretationResponse(
@@ -147,64 +147,74 @@ class GeminiASLService:
         )
         contents.append(prompt)
 
+        models_to_try = [self.model_name]
+        if "gemini-flash-latest" not in models_to_try:
+            models_to_try.append("gemini-flash-latest")
+
         async with self.semaphore:
             t0 = time.perf_counter()
-            try:
-                # Run generate_content inside executor to keep async loop non-blocking
-                loop = asyncio.get_running_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: self.client.models.generate_content(
-                        model=self.model_name,
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            system_instruction=ASL_SYSTEM_INSTRUCTION,
-                            response_mime_type="application/json",
-                            response_schema=ASLInterpretationResponse,
-                            temperature=0.2,
+            last_err_msg = ""
+            for target_model in models_to_try:
+                try:
+                    # Run generate_content inside executor to keep async loop non-blocking
+                    loop = asyncio.get_running_loop()
+                    response = await loop.run_in_executor(
+                        None,
+                        lambda m=target_model: self.client.models.generate_content(
+                            model=m,
+                            contents=contents,
+                            config=types.GenerateContentConfig(
+                                system_instruction=ASL_SYSTEM_INSTRUCTION,
+                                response_mime_type="application/json",
+                                response_schema=ASLInterpretationResponse,
+                                temperature=0.2,
+                            ),
                         ),
-                    ),
-                )
-                latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+                    )
+                    latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+                    self.model_name = target_model
 
-                # Parse parsed model output
-                if hasattr(response, "parsed") and response.parsed:
-                    parsed_res: ASLInterpretationResponse = response.parsed
-                    # Ensure metadata matches this window
+                    # Parse parsed model output
+                    if hasattr(response, "parsed") and response.parsed:
+                        parsed_res: ASLInterpretationResponse = response.parsed
+                        # Ensure metadata matches this window
+                        parsed_res.start_timestamp_ms = start_ts
+                        parsed_res.end_timestamp_ms = end_ts
+                        parsed_res.sequence_id = sequence_id
+                        return parsed_res
+
+                    # Fallback to parsing text JSON
+                    raw_text = response.text or "{}"
+                    parsed_res = ASLInterpretationResponse.model_validate_json(raw_text)
                     parsed_res.start_timestamp_ms = start_ts
                     parsed_res.end_timestamp_ms = end_ts
                     parsed_res.sequence_id = sequence_id
                     return parsed_res
 
-                # Fallback to parsing text JSON
-                raw_text = response.text or "{}"
-                parsed_res = ASLInterpretationResponse.model_validate_json(raw_text)
-                parsed_res.start_timestamp_ms = start_ts
-                parsed_res.end_timestamp_ms = end_ts
-                parsed_res.sequence_id = sequence_id
-                return parsed_res
+                except Exception as e:
+                    last_err_msg = str(e)
+                    print(f"[GeminiASLService] Model {target_model} error: {last_err_msg}")
+                    if "404" in last_err_msg or "not found" in last_err_msg.lower():
+                        continue
+                    break
 
-            except Exception as e:
-                latency_ms = round((time.perf_counter() - t0) * 1000, 2)
-                err_msg = str(e)
-                print(f"[GeminiASLService] Generation error ({latency_ms}ms): {err_msg}")
+            latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+            uncertainty_reason = "api_error"
+            if "quota" in last_err_msg.lower() or "429" in last_err_msg:
+                uncertainty_reason = "rate_limit_exceeded"
+            elif "timeout" in last_err_msg.lower():
+                uncertainty_reason = "request_timeout"
 
-                uncertainty_reason = "api_error"
-                if "quota" in err_msg.lower() or "429" in err_msg:
-                    uncertainty_reason = "rate_limit_exceeded"
-                elif "timeout" in err_msg.lower():
-                    uncertainty_reason = "request_timeout"
-
-                return ASLInterpretationResponse(
-                    status="uncertain",
-                    recognized_text="",
-                    alternatives=[],
-                    uncertainty_reason=f"{uncertainty_reason}: {err_msg[:120]}",
-                    observations=[],
-                    start_timestamp_ms=start_ts,
-                    end_timestamp_ms=end_ts,
-                    sequence_id=sequence_id,
-                )
+            return ASLInterpretationResponse(
+                status="uncertain",
+                recognized_text="",
+                alternatives=[],
+                uncertainty_reason=f"{uncertainty_reason}: {last_err_msg[:120]}",
+                observations=[],
+                start_timestamp_ms=start_ts,
+                end_timestamp_ms=end_ts,
+                sequence_id=sequence_id,
+            )
 
 
 # Singleton instance
