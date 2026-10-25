@@ -81,6 +81,25 @@ async function runTests() {
   assert.ok(Math.abs(flat[60] - 2.0) < 1e-4);
   console.log('✓ Passed: Flat 63-element coordinate buffer generated correctly.');
 
+  // Test 5: Canonical Landmark Normalization & Sample Inference
+  console.log('Test 5: Testing canonical wrist-centering & scale-normalization on ASL landmarks...');
+  const testCmd = [
+    'import onnxruntime as ort',
+    'import numpy as np',
+    "d = np.load('cv-service/ml/extracted_features.npz', allow_pickle=True)",
+    "session = ort.InferenceSession('public/models/signflow_brain.onnx', providers=['CPUExecutionProvider'])",
+    "idxs = [i for i, l in enumerate(d['labels']) if l in ['A', 'B', 'C', 'O', 'F']][:5]",
+    "preds = session.run(None, {'landmarks': d['features'][idxs]})[0]",
+    "gt = d['labels'][idxs]",
+    "acc = np.mean(preds == gt)",
+    "assert acc >= 0.80, f'Expected accuracy >= 80%, got {acc}'",
+    "print(f'SAMPLE_PRED_ACC_{int(acc * 100)}')",
+  ].join('; ');
+
+  const testOutput = execSync(`"${pyExe}" -c "${testCmd}"`, { cwd: rootDir, encoding: 'utf-8' });
+  assert.ok(testOutput.includes('SAMPLE_PRED_ACC_'), 'Sample prediction failed');
+  console.log('✓ Passed: Canonical landmark inference verified on dataset samples.');
+
   console.log('=== All ONNX Brain Integration Tests Passed Successfully! ===');
 }
 

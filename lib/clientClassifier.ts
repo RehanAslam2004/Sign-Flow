@@ -389,8 +389,49 @@ export function classifyHandFeatures(
     };
   }
 
-  // 7. MORE / EAT: 5 fingertips cluster
-  if (maxTipSpread < 0.45 && curledCount < 4) {
+  // 6b. "O" and "F" Handshapes (Thumb and index form a circle)
+  if (dThumbIndex < 0.38) {
+    if (middleExt && ringExt && pinkyExt) {
+      return {
+        status: 'recognized',
+        sign: 'F',
+        confidence: 0.88,
+        margin: 0.32,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'F', confidence: 0.88 },
+          { sign: 'O', confidence: 0.40 },
+        ],
+        gesture_type: 'f_ok_handshape',
+        language: 'asl',
+      };
+    } else if (!middleExt && !ringExt && !pinkyExt) {
+      return {
+        status: 'recognized',
+        sign: 'O',
+        confidence: 0.88,
+        margin: 0.32,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'O', confidence: 0.88 },
+          { sign: 'F', confidence: 0.45 },
+        ],
+        gesture_type: 'o_handshape',
+        language: 'asl',
+      };
+    }
+  }
+
+  // 7. MORE / EAT: 5 fingertips cluster (all 5 tips meet together)
+  const allTipsTouchThumb =
+    dist(thumbTip, indexTip) < 0.42 &&
+    dist(thumbTip, middleTip) < 0.45 &&
+    dist(thumbTip, ringTip) < 0.45 &&
+    dist(thumbTip, pinkyTip) < 0.48;
+
+  if (allTipsTouchThumb && curledCount < 4) {
     if (avgY < 0.40) {
       return {
         status: 'recognized',

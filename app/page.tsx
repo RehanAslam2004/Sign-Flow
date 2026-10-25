@@ -192,6 +192,7 @@ export default function SignFlowHome() {
   const animationFrameIdRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number>(0);
   const frameCounterRef = useRef<number>(0);
+  const isEdgeInferenceActiveRef = useRef<boolean>(true);
 
   // Mode ref
   const modeRef = useRef<UsageMode>(mode);
@@ -433,16 +434,19 @@ export default function SignFlowHome() {
         if (prediction.handedness) setLatestHandedness(prediction.handedness);
         if (prediction.hands_count !== undefined) setLatestHandsCount(prediction.hands_count);
 
-        if (prediction.sign) {
-          setCandidateSign(prediction.sign);
-          setCandidateConfidence(prediction.confidence || 0.9);
+        // Only let backend WebSocket drive the state machine if local edge inference is not currently active
+        if (!isEdgeInferenceActiveRef.current) {
+          if (prediction.sign) {
+            setCandidateSign(prediction.sign);
+            setCandidateConfidence(prediction.confidence || 0.9);
+          }
+
+          // Two-tier continuous interpretation manager (Gemini continuous ASL)
+          transcriptManagerRef.current?.processPrediction(prediction);
+
+          stateMachineRef.current?.processPrediction(prediction);
+          setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
         }
-
-        // Two-tier continuous interpretation manager (Gemini continuous ASL)
-        transcriptManagerRef.current?.processPrediction(prediction);
-
-        stateMachineRef.current?.processPrediction(prediction);
-        setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
       },
       (status) => {
         if (isMounted && sessionIdRef.current === sessionForThisEffect) {
@@ -550,16 +554,22 @@ export default function SignFlowHome() {
             context_sentence: lastConfirmedSentenceRef.current || undefined,
           };
 
-          // Run instant in-browser edge preview (ONNX Brain + Geometric Invariants)
+          // Run instant in-browser edge preview (ONNX Brain as primary, Geometric Invariants as fallback)
           if (hasHands && hands[0]?.landmarks) {
-            // 1. Run on-device ONNX Brain inference
+            isEdgeInferenceActiveRef.current = true;
+            const primaryHand = hands[0];
+
             if (onnxBrain.isReady()) {
-              onnxBrain.predict(hands[0].landmarks).then((brainPred) => {
-                if (brainPred && brainPred.confidence >= 0.70 && isSessionActiveRef.current) {
+              onnxBrain.predict(primaryHand.landmarks, primaryHand.handedness).then((brainPred) => {
+                if (!isSessionActiveRef.current) return;
+                if (brainPred && brainPred.confidence >= 0.60) {
                   setCandidateSign(brainPred.sign);
                   setCandidateConfidence(brainPred.confidence);
                   if (brainPred.margin !== undefined) setLatestMargin(brainPred.margin);
                   if (brainPred.topCandidates) setLatestTopCandidates(brainPred.topCandidates);
+                  if (primaryHand.handedness) setLatestHandedness(primaryHand.handedness);
+                  setLatestHandsCount(hands.length);
+
                   stateMachineRef.current?.processPrediction({
                     schema_version: '2.0',
                     session_id: activeSession,
@@ -571,23 +581,42 @@ export default function SignFlowHome() {
                     margin: brainPred.margin,
                     top_candidates: brainPred.topCandidates,
                     is_candidate: true,
+                    handedness: primaryHand.handedness,
+                    hands_count: hands.length,
+                    language: 'asl',
                   });
+                  setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
+                } else {
+                  // Fallback to geometric rules if ONNX confidence is low
+                  const edgePred = runClientInference(payload);
+                  if (edgePred.status === 'recognized' && edgePred.sign && edgePred.sign !== 'RECOGNIZING') {
+                    setCandidateSign(edgePred.sign);
+                    setCandidateConfidence(edgePred.confidence);
+                    if (edgePred.margin !== undefined) setLatestMargin(edgePred.margin);
+                    if (edgePred.top_candidates) setLatestTopCandidates(edgePred.top_candidates);
+                    if (edgePred.handedness) setLatestHandedness(edgePred.handedness);
+                    if (edgePred.hands_count !== undefined) setLatestHandsCount(edgePred.hands_count);
+                    stateMachineRef.current?.processPrediction(edgePred);
+                    setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
+                  }
                 }
               }).catch(() => {});
+            } else {
+              // ONNX Brain not ready yet: use geometric rules
+              const edgePred = runClientInference(payload);
+              if (edgePred.status === 'recognized' && edgePred.sign && edgePred.sign !== 'RECOGNIZING') {
+                setCandidateSign(edgePred.sign);
+                setCandidateConfidence(edgePred.confidence);
+                if (edgePred.margin !== undefined) setLatestMargin(edgePred.margin);
+                if (edgePred.top_candidates) setLatestTopCandidates(edgePred.top_candidates);
+                if (edgePred.handedness) setLatestHandedness(edgePred.handedness);
+                if (edgePred.hands_count !== undefined) setLatestHandsCount(edgePred.hands_count);
+                stateMachineRef.current?.processPrediction(edgePred);
+                setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
+              }
             }
-
-            // 2. Also evaluate geometric invariant rules
-            const edgePred = runClientInference(payload);
-            if (edgePred.status === 'recognized' && edgePred.sign && edgePred.sign !== 'RECOGNIZING') {
-              setCandidateSign(edgePred.sign);
-              setCandidateConfidence(edgePred.confidence);
-              if (edgePred.margin !== undefined) setLatestMargin(edgePred.margin);
-              if (edgePred.top_candidates) setLatestTopCandidates(edgePred.top_candidates);
-              if (edgePred.handedness) setLatestHandedness(edgePred.handedness);
-              if (edgePred.hands_count !== undefined) setLatestHandsCount(edgePred.hands_count);
-              stateMachineRef.current?.processPrediction(edgePred);
-              setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
-            }
+          } else {
+            isEdgeInferenceActiveRef.current = false;
           }
 
           const sent = wsClient.sendFrame(payload);

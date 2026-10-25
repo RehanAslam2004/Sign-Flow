@@ -58,20 +58,35 @@ export function analyzePointingLandmarks(
 
   const palmScale = Math.max(dist3D(mcpMiddle, wrist), 1e-4);
 
-  // 1. Index finger extension check
+  // 0. Guard: If index tip and thumb tip touch or are close, it is an "O", "F", or pinch shape, NEVER pointing!
+  const tipThumb = landmarks[4];
+  const dIndexThumb = dist3D(tipIndex, tipThumb);
+  if (dIndexThumb < 0.38 * palmScale) {
+    return {
+      isPointing: false,
+      gestureType: null,
+      candidatePSL: null,
+      candidateEN: null,
+      confidence: 0,
+      margin: 0,
+      directionVector: null,
+      diagnostics: { reason: 'index_thumb_touching_pinch_or_o_shape' },
+    };
+  }
+
+  // 1. Index finger extension check (orientation-independent knuckle-to-tip distance)
   const indexLen = dist3D(tipIndex, mcpIndex);
-  const indexWristDist = dist3D(tipIndex, wrist);
-  const mcpWristDist = dist3D(mcpIndex, wrist);
+  const isIndexExtended = indexLen > 0.85 * palmScale;
 
-  const isIndexExtended = indexWristDist > 1.25 * mcpWristDist || indexLen > 0.8 * palmScale;
-
-  // 2. Curl checks for Middle, Ring, Pinky
-  const middleCurlRatio = dist3D(tipMiddle, wrist) / Math.max(dist3D(mcpMiddle, wrist), 1e-4);
-  const ringCurlRatio = dist3D(tipRing, wrist) / Math.max(dist3D(mcpRing, wrist), 1e-4);
-  const pinkyCurlRatio = dist3D(tipPinky, wrist) / Math.max(dist3D(mcpPinky, wrist), 1e-4);
+  // 2. Middle, Ring, Pinky must be curled into palm
+  const middleLen = dist3D(tipMiddle, mcpMiddle);
+  const ringLen = dist3D(tipRing, mcpRing);
+  const pinkyLen = dist3D(tipPinky, mcpPinky);
 
   const otherFingersCurled =
-    middleCurlRatio < 1.35 && ringCurlRatio < 1.35 && pinkyCurlRatio < 1.35;
+    middleLen < 0.75 * palmScale &&
+    ringLen < 0.75 * palmScale &&
+    pinkyLen < 0.75 * palmScale;
 
   if (!isIndexExtended || !otherFingersCurled) {
     return {
@@ -85,9 +100,9 @@ export function analyzePointingLandmarks(
       diagnostics: {
         isIndexExtended,
         otherFingersCurled,
-        middleCurlRatio,
-        ringCurlRatio,
-        pinkyCurlRatio,
+        middleLen,
+        ringLen,
+        pinkyLen,
       },
     };
   }

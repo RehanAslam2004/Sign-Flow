@@ -2,7 +2,7 @@
  * SignFlow ONNX Brain Inference Engine
  *
  * Implements the on-device AI Brain:
- * Webcam Feed -> MediaPipe Hands -> 21 Landmarks Flat Array (63 floats) -> ONNX Inference
+ * Webcam Feed -> MediaPipe Hands -> 21 Canonical Landmarks (63 floats) -> ONNX Inference
  * Compatible with Keithsel/asl_signs alphabet mapping and target ASL vocabulary.
  */
 
@@ -102,6 +102,7 @@ class ONNXBrainManager {
       if (ort.env?.wasm) {
         ort.env.wasm.numThreads = 1;
         ort.env.wasm.simd = true;
+        ort.env.wasm.proxy = false; // Run directly on main thread for zero worker latency & no worker CSP issues
         ort.env.wasm.wasmPaths = '/ort/';
       }
 
@@ -112,7 +113,7 @@ class ONNXBrainManager {
       });
 
       this.isLoaded = true;
-      console.log('[ONNXBrain] Initialized on-device ONNX Brain model (Wasm) with classes:', this.classes.length);
+      console.log(`[ONNXBrain] Successfully loaded ONNX Brain model (Wasm) with ${this.classes.length} classes.`);
       return true;
     } catch (err) {
       console.warn('[ONNXBrain] Failed to load ONNX model:', err);
@@ -124,11 +125,11 @@ class ONNXBrainManager {
   }
 
   /**
-   * Executes inference on 21 3D hand landmarks (63-dimensional coordinate array).
+   * Executes inference on 21 3D hand landmarks using canonical wrist-centering
+   * and scale-normalization matching the training feature distribution.
    */
-  async predict(landmarks: LandmarkPoint[] | number[]): Promise<BrainPrediction | null> {
+  async predict(landmarks: LandmarkPoint[] | number[], handedness?: string): Promise<BrainPrediction | null> {
     if (!this.isLoaded || !this.session) {
-      // Lazy init if not loaded
       if (!this.isInitializing) {
         this.init();
       }
@@ -142,7 +143,7 @@ class ONNXBrainManager {
     const t0 = performance.now();
 
     try {
-      // Flatten 21 landmarks into standard Float32Array[63]
+      // Flatten 21 landmarks into standard Float32Array[63] with canonical normalization
       const flat = new Float32Array(63);
 
       if (typeof landmarks[0] === 'number') {
@@ -153,10 +154,39 @@ class ONNXBrainManager {
       } else {
         const pts = landmarks as LandmarkPoint[];
         if (pts.length < 21) return null;
+
+        // Canonical normalization matching cv-service/preprocessing.py & training
+        const wrist = pts[0];
+        const mcpMiddle = pts[9];
+        let scaleDist = Math.hypot(
+          mcpMiddle.x - wrist.x,
+          mcpMiddle.y - wrist.y,
+          (mcpMiddle.z || 0) - (wrist.z || 0)
+        );
+
+        if (scaleDist < 1e-4) {
+          // Fallback to median across MCP 5, 9, 17
+          const spans = [
+            Math.hypot(pts[5].x - wrist.x, pts[5].y - wrist.y, (pts[5].z || 0) - (wrist.z || 0)),
+            Math.hypot(pts[9].x - wrist.x, pts[9].y - wrist.y, (pts[9].z || 0) - (wrist.z || 0)),
+            Math.hypot(pts[17].x - wrist.x, pts[17].y - wrist.y, (pts[17].z || 0) - (wrist.z || 0)),
+          ].filter((s) => s > 1e-4);
+          spans.sort((a, b) => a - b);
+          scaleDist = spans.length > 0 ? spans[Math.floor(spans.length / 2)] : 1.0;
+        }
+
+        const isLeft = handedness && handedness.trim().toLowerCase() === 'left';
+
         for (let i = 0; i < 21; i++) {
-          flat[i * 3 + 0] = pts[i].x;
-          flat[i * 3 + 1] = pts[i].y;
-          flat[i * 3 + 2] = pts[i].z || 0.0;
+          let x = (pts[i].x - wrist.x) / scaleDist;
+          let y = (pts[i].y - wrist.y) / scaleDist;
+          let z = ((pts[i].z || 0) - (wrist.z || 0)) / scaleDist;
+          if (isLeft) {
+            x = -x; // Chirality normalization
+          }
+          flat[i * 3 + 0] = x;
+          flat[i * 3 + 1] = y;
+          flat[i * 3 + 2] = z;
         }
       }
 
@@ -217,7 +247,7 @@ class ONNXBrainManager {
   }
 
   isReady(): boolean {
-    return this.isLoaded;
+    return this.isLoaded && this.session !== null;
   }
 }
 
