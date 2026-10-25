@@ -9,13 +9,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "npx tsx tests/test_session_lifecycle.ts && npx tsx tests/test_suggested_replies.ts && npx tsx tests/test_client_classifier.ts && npx tsx tests/test_psl_integration.ts && npx tsx tests/test_language_intelligence.ts && npx tsx tests/test_recognition_reliability.ts && npx tsx tests/test_pointing_and_unified_recognition.ts && npx tsx tests/test_transcript_manager.ts && npx tsx tests/test_deaf_communication_sentences.ts && npx tsx tests/test_api_translate.ts"
-
+    "test": "npx tsx tests/test_session_lifecycle.ts && npx tsx tests/test_suggested_replies.ts && npx tsx tests/test_client_classifier.ts && npx tsx tests/test_psl_integration.ts && npx tsx tests/test_language_intelligence.ts && npx tsx tests/test_recognition_reliability.ts && npx tsx tests/test_pointing_and_unified_recognition.ts && npx tsx tests/test_transcript_manager.ts && npx tsx tests/test_deaf_communication_sentences.ts && npx tsx tests/test_api_translate.ts && npx tsx tests/test_onnx_inference.ts"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.14",
     "lucide-react": "^0.475.0",
     "next": "^14.2.24",
+    "onnxruntime-web": "^1.30.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

@@ -14,6 +14,7 @@ import FeedbackModal from '@/components/FeedbackModal';
 import RecognitionDiagnostics from '@/components/RecognitionDiagnostics';
 import ContextualTranslationBlock from '@/components/ContextualTranslationBlock';
 import { translationClient } from '@/lib/translationClient';
+import { onnxBrain } from '@/lib/onnxBrain';
 
 import { UsageMode, ConversationMessage, SuggestedReply } from '@/types/app';
 import { FramePayload, SignLanguageMode, PredictionCandidate } from '@/types/contract';
@@ -115,7 +116,7 @@ export default function SignFlowHome() {
   const sessionIdRef = useRef<string | null>(null);
   const isSessionActiveRef = useRef<boolean>(false);
 
-  // Auto-launch directly into live ASL recognition session on mount
+  // Auto-launch directly into live ASL recognition session on mount and warm on-device ONNX Brain
   useEffect(() => {
     const newSessionId = generateSessionId();
     sessionIdRef.current = newSessionId;
@@ -123,6 +124,7 @@ export default function SignFlowHome() {
     sessionStartTimeRef.current = Date.now();
     setCurrentSessionId(newSessionId);
     setMode('signing');
+    onnxBrain.init();
   }, []);
 
   // Connection & Recognition UI state
@@ -548,8 +550,33 @@ export default function SignFlowHome() {
             context_sentence: lastConfirmedSentenceRef.current || undefined,
           };
 
-          // Run instant in-browser edge preview for zero-latency UI responsiveness
-          if (hasHands) {
+          // Run instant in-browser edge preview (ONNX Brain + Geometric Invariants)
+          if (hasHands && hands[0]?.landmarks) {
+            // 1. Run on-device ONNX Brain inference
+            if (onnxBrain.isReady()) {
+              onnxBrain.predict(hands[0].landmarks).then((brainPred) => {
+                if (brainPred && brainPred.confidence >= 0.70 && isSessionActiveRef.current) {
+                  setCandidateSign(brainPred.sign);
+                  setCandidateConfidence(brainPred.confidence);
+                  if (brainPred.margin !== undefined) setLatestMargin(brainPred.margin);
+                  if (brainPred.topCandidates) setLatestTopCandidates(brainPred.topCandidates);
+                  stateMachineRef.current?.processPrediction({
+                    schema_version: '2.0',
+                    session_id: activeSession,
+                    frame_id: frameCounterRef.current,
+                    timestamp: Date.now(),
+                    status: 'recognized',
+                    sign: brainPred.sign,
+                    confidence: brainPred.confidence,
+                    margin: brainPred.margin,
+                    top_candidates: brainPred.topCandidates,
+                    is_candidate: true,
+                  });
+                }
+              }).catch(() => {});
+            }
+
+            // 2. Also evaluate geometric invariant rules
             const edgePred = runClientInference(payload);
             if (edgePred.status === 'recognized' && edgePred.sign && edgePred.sign !== 'RECOGNIZING') {
               setCandidateSign(edgePred.sign);
