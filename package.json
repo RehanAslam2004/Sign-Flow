@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "npx tsx tests/test_session_lifecycle.ts && npx tsx tests/test_suggested_replies.ts && npx tsx tests/test_client_classifier.ts && npx tsx tests/test_psl_integration.ts && npx tsx tests/test_language_intelligence.ts && npx tsx tests/test_recognition_reliability.ts && npx tsx tests/test_pointing_and_unified_recognition.ts && npx tsx tests/test_transcript_manager.ts && npx tsx tests/test_deaf_communication_sentences.ts"
+    "test": "npx tsx tests/test_session_lifecycle.ts && npx tsx tests/test_suggested_replies.ts && npx tsx tests/test_client_classifier.ts && npx tsx tests/test_psl_integration.ts && npx tsx tests/test_language_intelligence.ts && npx tsx tests/test_recognition_reliability.ts && npx tsx tests/test_pointing_and_unified_recognition.ts && npx tsx tests/test_transcript_manager.ts && npx tsx tests/test_deaf_communication_sentences.ts && npx tsx tests/test_api_translate.ts"
 
   },
   "dependencies": {

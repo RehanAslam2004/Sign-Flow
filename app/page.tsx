@@ -12,6 +12,8 @@ import ErrorBanner from '@/components/ErrorBanner';
 import GhostHandGuide from '@/components/GhostHandGuide';
 import FeedbackModal from '@/components/FeedbackModal';
 import RecognitionDiagnostics from '@/components/RecognitionDiagnostics';
+import ContextualTranslationBlock from '@/components/ContextualTranslationBlock';
+import { translationClient } from '@/lib/translationClient';
 
 import { UsageMode, ConversationMessage, SuggestedReply } from '@/types/app';
 import { FramePayload, SignLanguageMode, PredictionCandidate } from '@/types/contract';
@@ -146,6 +148,12 @@ export default function SignFlowHome() {
   const [latestSequenceId, setLatestSequenceId] = useState<string | number | undefined>(undefined);
   const [latestUncertainty, setLatestUncertainty] = useState<string | null | undefined>(undefined);
 
+  // Step 4 & 5: Contextual AI Translation state (/api/translate & DOM render beneath canvas)
+  const [liveSynthesizedText, setLiveSynthesizedText] = useState<string | null>(null);
+  const [isAiSynthesized, setIsAiSynthesized] = useState<boolean>(false);
+  const [translationModel, setTranslationModel] = useState<string>('Gemini 2.5 Flash');
+  const [isTranslating, setIsTranslating] = useState<boolean>(false);
+
   // Suggested Sign Reply state (exclusively active for 'partner' mode)
   const [activeGhostHandReply, setActiveGhostHandReply] = useState<SuggestedReply | null>(null);
 
@@ -195,6 +203,28 @@ export default function SignFlowHome() {
     setActiveGhostHandReply(null);
   }, []);
 
+  // Step 4: AI Translation (LLM Engine) caller
+  const triggerTranslation = useCallback(async (tokens: string[]) => {
+    if (!tokens || tokens.length === 0 || !isSessionActiveRef.current) return;
+    setIsTranslating(true);
+    try {
+      const res = await translationClient.translateTokens(tokens, {
+        sessionId: sessionIdRef.current || undefined,
+        language: selectedLanguageRef.current,
+        previousContext: lastConfirmedSentenceRef.current || undefined,
+      });
+      if (res && res.translatedText && isSessionActiveRef.current) {
+        setLiveSynthesizedText(res.translatedText);
+        setIsAiSynthesized(res.isAiSynthesized);
+        setTranslationModel(res.model === 'local-grammar-rule' ? 'Edge AI Engine' : res.model);
+      }
+    } catch (err) {
+      console.warn('triggerTranslation error:', err);
+    } finally {
+      setIsTranslating(false);
+    }
+  }, []);
+
   // 1. Initialize State Machine and Transcript Manager
   useEffect(() => {
     stateMachineRef.current = new RecognitionStateMachine({
@@ -216,7 +246,11 @@ export default function SignFlowHome() {
           return;
         }
         setLastConfirmedSign(sign);
-        setActiveUtterance((prev) => [...prev, sign]);
+        setActiveUtterance((prev) => {
+          const next = [...prev, sign];
+          triggerTranslation(next);
+          return next;
+        });
       },
       onUtteranceComplete: (phrase, rawTokens, eventSessionId) => {
         if (
@@ -229,27 +263,54 @@ export default function SignFlowHome() {
         const confidences = stateMachineRef.current?.getActiveConfidences() || [];
         const formatted = formatSentence(rawTokens, selectedLanguageRef.current, confidences);
 
+        const msgId = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const initialText = liveSynthesizedText || formatted.englishSentence || formatted.rawDisplay || phrase;
+
         const newMessage: ConversationMessage = {
-          id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          text: formatted.englishSentence || formatted.rawDisplay || phrase,
+          id: msgId,
+          text: initialText,
           timestamp: Date.now(),
           spoken: autoSpeechEnabledRef.current,
           rawTokens: formatted.rawTokens,
           rawDisplay: formatted.rawDisplay,
           urduSentence: formatted.urduSentence,
-          englishSentence: formatted.englishSentence,
+          englishSentence: initialText,
           isPatternMatched: formatted.isPatternMatched,
           averageConfidence: formatted.confidence,
         };
         setMessages((prev) => [newMessage, ...prev]);
         setActiveUtterance([]);
+        lastConfirmedSentenceRef.current = initialText;
 
         if (autoSpeechEnabledRef.current) {
-          speechEngine.speak(formatted.spokenText || formatted.englishSentence || phrase, eventSessionId);
+          speechEngine.speak(initialText, eventSessionId);
         }
 
+        // Asynchronously query Gemini translation to refine if not already matched
+        translationClient
+          .translateTokens(rawTokens, {
+            sessionId: sessionIdRef.current || undefined,
+            language: selectedLanguageRef.current,
+            previousContext: lastConfirmedSentenceRef.current || undefined,
+          })
+          .then((aiRes) => {
+            if (aiRes && aiRes.translatedText && isSessionActiveRef.current) {
+              setLiveSynthesizedText(aiRes.translatedText);
+              setIsAiSynthesized(aiRes.isAiSynthesized);
+              setTranslationModel(aiRes.model === 'local-grammar-rule' ? 'Edge AI Engine' : aiRes.model);
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === msgId
+                    ? { ...m, text: aiRes.translatedText, englishSentence: aiRes.translatedText }
+                    : m
+                )
+              );
+            }
+          })
+          .catch((err) => console.warn('Post-utterance translate failed:', err));
+
         if (modeRef.current === 'partner') {
-          const queryText = formatted.englishSentence || phrase;
+          const queryText = initialText;
           const replies = getSuggestedRepliesForText(queryText);
           if (replies.length > 0 && replies[0].reference) {
             setActiveGhostHandReply({
@@ -546,6 +607,10 @@ export default function SignFlowHome() {
       setCandidateConfidence(0);
       setLastConfirmedSign(null);
       setProvisionalText(null);
+      setLiveSynthesizedText(null);
+      setIsAiSynthesized(false);
+      setIsTranslating(false);
+      translationClient.clear();
       lastConfirmedSentenceRef.current = null;
       hadHandsRef.current = false;
       lastHandsSeenTimeRef.current = 0;
@@ -636,6 +701,10 @@ export default function SignFlowHome() {
 
     // 6. Clear suggested replies and ghost-hand guide
     clearSuggestedRepliesState();
+    translationClient.clear();
+    setLiveSynthesizedText(null);
+    setIsAiSynthesized(false);
+    setIsTranslating(false);
 
     // 7. Transition to completed session summary
     setServiceStatus('disconnected');
@@ -646,6 +715,10 @@ export default function SignFlowHome() {
     setMessages([]);
     setActiveUtterance([]);
     setProvisionalText(null);
+    setLiveSynthesizedText(null);
+    setIsAiSynthesized(false);
+    setIsTranslating(false);
+    translationClient.clear();
     lastConfirmedSentenceRef.current = null;
     stateMachineRef.current?.reset(sessionIdRef.current || undefined);
     transcriptManagerRef.current?.reset();
@@ -847,6 +920,18 @@ export default function SignFlowHome() {
                     />
                   )}
                 </CameraViewport>
+
+                {/* Step 5: Output (Contextual UI Render) - Dynamic DOM text block beneath webcam canvas */}
+                <ContextualTranslationBlock
+                  synthesizedSentence={liveSynthesizedText}
+                  candidateSign={candidateSign}
+                  activeUtterance={activeUtterance}
+                  isAiSynthesized={isAiSynthesized}
+                  modelName={translationModel}
+                  isTranslating={isTranslating}
+                  onSpeak={(text) => speechEngine.speak(text, currentSessionId || undefined)}
+                  handsDetected={handsDetected}
+                />
 
                 {/* Session Control Toolbar directly beneath camera on desktop */}
                 <div className="hidden lg:block">
