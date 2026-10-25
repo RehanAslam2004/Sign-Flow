@@ -52,6 +52,26 @@ export interface DiagnosticsSnapshot {
 const HIGH_CONFIDENCE_BYPASS = 0.90;
 const HIGH_MARGIN_BYPASS = 0.25;
 
+export function isEquivalentSign(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const s1 = a.toUpperCase();
+  const s2 = b.toUpperCase();
+  if (s1 === s2) return true;
+  const equivGroups = [
+    ['YOU', 'AP', 'YOUR', 'APKI'],
+    ['ME', 'MUJHAY', 'MY'],
+    ['HELLO', 'ASSALAMULAIKUM'],
+    ['BEMAR', 'ILL', 'SICK'],
+    ['MEDICINE', 'DAWA'],
+    ['BUY', 'KHARIDNA'],
+    ['THANKS', 'THANK_YOU'],
+    ['HELP', 'ALIF'],
+    ['MEET', 'NICE'],
+  ];
+  return equivGroups.some((grp) => grp.includes(s1) && grp.includes(s2));
+}
+
 export class RecognitionStateMachine {
   private callbacks: StateMachineCallbacks;
   private sessionId: string | null = null;
@@ -103,11 +123,11 @@ export class RecognitionStateMachine {
   // -------------------------------------------------------------------------
 
   private getAdaptiveStabilityMs(confidence: number, margin: number): number {
-    // High confidence + high separation -> fast confirmation (350ms)
-    if (confidence >= 0.90 && margin >= 0.30) return 350;
-    if (confidence >= 0.85 && margin >= 0.20) return 450;
-    if (confidence >= 0.75 && margin >= 0.15) return 550;
-    return 750;
+    // Fast, responsive confirmation calibrated for conversational signing
+    if (confidence >= 0.85 && margin >= 0.20) return 250;
+    if (confidence >= 0.70 && margin >= 0.12) return 300;
+    if (confidence >= 0.60) return 380;
+    return 480;
   }
 
   // -------------------------------------------------------------------------
@@ -266,8 +286,8 @@ export class RecognitionStateMachine {
     const isHighConfidenceBypass =
       confidence >= HIGH_CONFIDENCE_BYPASS && margin >= HIGH_MARGIN_BYPASS;
 
-    // 7. Transition handling
-    if (this.currentCandidate !== detectedSign) {
+    // 7. Transition handling: check if candidate changed to a non-equivalent sign
+    if (this.currentCandidate !== detectedSign && !isEquivalentSign(this.currentCandidate, detectedSign)) {
       // New candidate starts stability window
       this.currentCandidate = detectedSign;
       this.candidateStartTime = now;
@@ -277,20 +297,20 @@ export class RecognitionStateMachine {
       return;
     }
 
-    // 7. Same candidate: check temporal stability requirement
+    // 7. Same candidate or equivalent sign: check temporal stability requirement
     const heldDuration = now - this.candidateStartTime;
     const requiredStability = this.getAdaptiveStabilityMs(confidence, margin);
 
-    if (heldDuration >= requiredStability && confidence >= CONFIG.CONFIDENCE_THRESHOLD) {
-      // Require consensus agreement and sufficient consensus ratio (>= 55%) unless high-confidence bypass
-      if (!isHighConfidenceBypass && (bestSign !== detectedSign || ratio < 0.55)) {
+    if (heldDuration >= requiredStability && confidence >= 0.60) {
+      // Require consensus agreement or equivalent sign agreement unless high-confidence bypass
+      const isConsensusMatch = bestSign === detectedSign || isEquivalentSign(bestSign, detectedSign);
+      if (!isHighConfidenceBypass && (!isConsensusMatch || ratio < 0.45)) {
         this.currentRejectionReason = 'temporal_consensus_waiting';
         return;
       }
 
-
       // Check deduplication lock: are we holding the sign we just committed?
-      if (this.lastCommittedSign === detectedSign) {
+      if (this.lastCommittedSign === detectedSign || isEquivalentSign(this.lastCommittedSign, detectedSign)) {
         this.lifecycleState = 'committed_hold';
         this.currentRejectionReason = 'duplicate_hold_locked';
         return;

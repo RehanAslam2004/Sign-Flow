@@ -33,6 +33,45 @@ function generateSessionId(): string {
   return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 }
 
+const ESSENTIAL_DEAF_PHRASES = [
+  {
+    icon: '💬',
+    label: 'Hello, how are you?',
+    urdu: 'ہیلو، آپ کیسے ہیں؟',
+    tokens: ['HELLO', 'YOU'],
+  },
+  {
+    icon: '🤝',
+    label: 'Nice to meet you.',
+    urdu: 'آپ سے مل کر خوشی ہوئی۔',
+    tokens: ['NICE', 'MEET', 'YOU'],
+  },
+  {
+    icon: '💊',
+    label: 'I am ill, I want to buy medicine.',
+    urdu: 'میں بیمار ہوں، مجھے دوائی خریدنی ہے۔',
+    tokens: ['Bemar', 'MEDICINE', 'BUY'],
+  },
+  {
+    icon: '🩺',
+    label: 'I need medicine.',
+    urdu: 'مجھے دوائی چاہیے۔',
+    tokens: ['Bemar', 'MEDICINE'],
+  },
+  {
+    icon: '🆘',
+    label: 'Can you please help me?',
+    urdu: 'کیا آپ میری مدد کر سکتے ہیں؟',
+    tokens: ['YOU', 'HELP'],
+  },
+  {
+    icon: '🙏',
+    label: 'Thank you very much.',
+    urdu: 'آپ کا بہت شکریہ۔',
+    tokens: ['THANKS', 'YOU'],
+  },
+];
+
 export default function SignFlowHome() {
   const [mode, setMode] = useState<UsageMode>(null);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
@@ -573,10 +612,55 @@ export default function SignFlowHome() {
   const handleFinishAndSpeak = () => {
     if (provisionalText) {
       transcriptManagerRef.current?.handleBoundaryPause();
-    } else {
+    } else if (activeUtterance.length > 0) {
       stateMachineRef.current?.finishUtterance();
+    } else if (candidateSign) {
+      // Direct commit of active candidate sign if held
+      const formatted = formatSentence([candidateSign], selectedLanguageRef.current);
+      const textToSpeak = formatted.spokenText || formatted.englishSentence;
+      const newMessage: ConversationMessage = {
+        id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        text: formatted.englishSentence || formatted.rawDisplay || candidateSign,
+        timestamp: Date.now(),
+        spoken: autoSpeechEnabledRef.current,
+        rawTokens: [candidateSign],
+        rawDisplay: formatted.rawDisplay,
+        urduSentence: formatted.urduSentence,
+        englishSentence: formatted.englishSentence,
+        isPatternMatched: formatted.isPatternMatched,
+        averageConfidence: candidateConfidence || 0.95,
+      };
+      setMessages((prev) => [newMessage, ...prev]);
+      setCandidateSign(null);
+      if (autoSpeechEnabledRef.current && textToSpeak) {
+        speechEngine.speak(textToSpeak, sessionIdRef.current || undefined);
+      }
     }
   };
+
+  const handleCommitQuickPhrase = useCallback((tokens: string[]) => {
+    const formatted = formatSentence(tokens, selectedLanguageRef.current);
+    const textToSpeak = formatted.spokenText || formatted.englishSentence;
+    const newMessage: ConversationMessage = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      text: formatted.englishSentence || formatted.rawDisplay || tokens.join(' '),
+      timestamp: Date.now(),
+      spoken: autoSpeechEnabledRef.current,
+      rawTokens: tokens,
+      rawDisplay: formatted.rawDisplay,
+      urduSentence: formatted.urduSentence,
+      englishSentence: formatted.englishSentence,
+      isPatternMatched: formatted.isPatternMatched,
+      averageConfidence: 1.0,
+    };
+    setMessages((prev) => [newMessage, ...prev]);
+    setActiveUtterance([]);
+    setCandidateSign(null);
+    lastConfirmedSentenceRef.current = formatted.englishSentence || formatted.rawDisplay || null;
+    if (autoSpeechEnabledRef.current && textToSpeak) {
+      speechEngine.speak(textToSpeak, sessionIdRef.current || undefined);
+    }
+  }, []);
 
   const handleEditMessage = useCallback((id: string, newText: string) => {
     setMessages((prev) =>
@@ -780,17 +864,27 @@ export default function SignFlowHome() {
                             "{provisionalText}"
                           </p>
                         </div>
-                      ) : activeUtterance.length > 0 ? (
+                      ) : (activeUtterance.length > 0 || candidateSign) ? (
                         (() => {
-                          const preview = formatPreview(activeUtterance, selectedLanguage);
+                          const previewTokens = activeUtterance.length > 0
+                            ? (candidateSign && !activeUtterance.includes(candidateSign) ? [...activeUtterance, candidateSign] : activeUtterance)
+                            : (candidateSign ? [candidateSign] : []);
+                          const preview = formatPreview(previewTokens, selectedLanguage);
                           const hasUrdu = Boolean(preview.previewUrdu && preview.previewUrdu.trim().length > 0);
+                          const isCandidateActive = Boolean(candidateSign && (!activeUtterance.length || candidateSign !== activeUtterance[activeUtterance.length - 1]));
 
                           return (
                             <div className="space-y-2">
-                              {/* Accumulated Sign Sequence */}
+                              {/* Accumulated Sign Sequence & Active Candidate Badge */}
                               <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono flex-wrap">
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tokens:</span>
-                                <span className="text-slate-600 font-medium">{preview.rawDisplay}</span>
+                                <span className="text-slate-700 font-semibold">{preview.rawDisplay}</span>
+                                {isCandidateActive && (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 text-[#068D9D] border border-teal-200 animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-[#068D9D]" />
+                                    Active: {formatSignDisplay(candidateSign)}
+                                  </span>
+                                )}
                               </div>
 
                               {/* Live Sentence Formation Preview */}
@@ -803,14 +897,14 @@ export default function SignFlowHome() {
                                     {preview.previewUrdu}
                                   </p>
                                   {preview.previewEnglish && (
-                                    <p className="text-xs sm:text-sm font-semibold text-slate-600">
+                                    <p className="text-sm sm:text-base font-bold text-teal-800">
                                       {preview.previewEnglish}
                                     </p>
                                   )}
                                 </div>
                               ) : (
-                                <p className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-wide break-words pt-1 border-t border-slate-200/60">
-                                  {preview.previewEnglish || activeUtterance.map((s) => formatSignDisplay(s)).join(' ')}
+                                <p className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-wide break-words pt-1 border-t border-slate-200/60 text-teal-950">
+                                  {preview.previewEnglish || previewTokens.map((s) => formatSignDisplay(s)).join(' ')}
                                 </p>
                               )}
                             </div>
@@ -830,9 +924,9 @@ export default function SignFlowHome() {
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-3">
                     <button
                       onClick={handleFinishAndSpeak}
-                      disabled={!provisionalText && activeUtterance.length === 0}
+                      disabled={!provisionalText && activeUtterance.length === 0 && !candidateSign}
                       className={`min-h-[48px] flex-1 py-3 px-4 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all focus-visible:ring-2 focus-visible:ring-[#068D9D] ${
-                        provisionalText || activeUtterance.length > 0
+                        provisionalText || activeUtterance.length > 0 || candidateSign
                           ? 'bg-[#068D9D] hover:bg-[#05707d] text-white shadow-sm active:scale-[0.99]'
                           : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                       }`}
@@ -841,6 +935,33 @@ export default function SignFlowHome() {
                       <Volume2 className="w-4 h-4 shrink-0" aria-hidden="true" />
                       <span>Finish & Speak</span>
                     </button>
+                  </div>
+
+                  {/* Quick Assistive Deaf Communication Shortcuts */}
+                  <div className="pt-3 border-t border-slate-100">
+                    <div className="flex items-center justify-between mb-2 px-0.5">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#068D9D]" />
+                        Essential Deaf Communication
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">Instant One-Tap Speak</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                      {ESSENTIAL_DEAF_PHRASES.map((item, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleCommitQuickPhrase(item.tokens)}
+                          className="flex items-center gap-2 px-2.5 py-2 text-left rounded-xl border border-slate-200/90 bg-slate-50/70 hover:bg-teal-50 hover:border-teal-300 transition-all text-xs text-slate-800 hover:text-teal-950 active:scale-[0.98] shadow-2xs group"
+                          title={`${item.label} (${item.urdu})`}
+                        >
+                          <span className="text-base shrink-0 group-hover:scale-110 transition-transform">{item.icon}</span>
+                          <span className="font-semibold truncate text-[11px] leading-snug">
+                            {item.label}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
