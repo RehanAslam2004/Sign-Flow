@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowLeft, Volume2, Activity, Flag } from 'lucide-react';
+import { ArrowLeft, Volume2, Activity, Flag, Square, RotateCcw } from 'lucide-react';
 import LandingSurface from '@/components/LandingSurface';
 import CameraViewport from '@/components/CameraViewport';
 import RecognitionStatus from '@/components/RecognitionStatus';
 import TranscriptView from '@/components/TranscriptView';
 import SessionControlBar from '@/components/SessionControlBar';
+import SessionSummary from '@/components/SessionSummary';
 import ErrorBanner from '@/components/ErrorBanner';
 import GhostHandGuide from '@/components/GhostHandGuide';
 import FeedbackModal from '@/components/FeedbackModal';
@@ -73,7 +74,17 @@ const ESSENTIAL_DEAF_PHRASES = [
 ];
 
 export default function SignFlowHome() {
-  const [mode, setMode] = useState<UsageMode>(null);
+  const [mode, setMode] = useState<UsageMode>('signing');
+  const [viewState, setViewState] = useState<'live' | 'completed'>('live');
+  const [sessionStats, setSessionStats] = useState<{
+    durationSeconds: number;
+    confirmedSigns: string[];
+    startTime: number;
+    endTime: number;
+  } | null>(null);
+  const sessionStartTimeRef = useRef<number>(Date.now());
+  const latestFeaturesRef = useRef<number[] | null>(null);
+
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
   const facingModeRef = useRef<'user' | 'environment'>(facingMode);
 
@@ -82,7 +93,7 @@ export default function SignFlowHome() {
   }, [facingMode]);
 
   // Unified Sign Recognition Engine (interprets PSL, ASL, and 3D pointing automatically)
-  const [selectedLanguage, setSelectedLanguage] = useState<SignLanguageMode>('unified');
+  const [selectedLanguage, setSelectedLanguage] = useState<SignLanguageMode>('asl');
   const selectedLanguageRef = useRef<SignLanguageMode>(selectedLanguage);
 
   useEffect(() => {
@@ -101,6 +112,16 @@ export default function SignFlowHome() {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const isSessionActiveRef = useRef<boolean>(false);
+
+  // Auto-launch directly into live ASL recognition session on mount
+  useEffect(() => {
+    const newSessionId = generateSessionId();
+    sessionIdRef.current = newSessionId;
+    isSessionActiveRef.current = true;
+    sessionStartTimeRef.current = Date.now();
+    setCurrentSessionId(newSessionId);
+    setMode('signing');
+  }, []);
 
   // Connection & Recognition UI state
   const [serviceStatus, setServiceStatus] = useState<ConnectionStatus | 'edge_active'>('connecting');
@@ -414,6 +435,12 @@ export default function SignFlowHome() {
 
         setHandsDetected(hasHands);
 
+        if (hasHands && hands[0]?.landmarks && hands[0].landmarks.length === 21) {
+          const flat: number[] = [];
+          hands[0].landmarks.forEach((p) => flat.push(p.x, p.y, p.z));
+          latestFeaturesRef.current = flat;
+        }
+
         let jpegBase64: string | undefined = undefined;
         let isBoundaryPause = false;
 
@@ -454,7 +481,7 @@ export default function SignFlowHome() {
             image_height: 360,
             hands_detected: hands.length,
             hands: hands,
-            language: 'asl_continuous',
+            language: 'asl',
             image_data: jpegBase64,
             is_boundary_pause: isBoundaryPause,
             context_sentence: lastConfirmedSentenceRef.current || undefined,
@@ -508,6 +535,7 @@ export default function SignFlowHome() {
       const newSessionId = generateSessionId();
       sessionIdRef.current = newSessionId;
       isSessionActiveRef.current = true;
+      sessionStartTimeRef.current = Date.now();
       setCurrentSessionId(newSessionId);
 
       // 2. Clear all previous session state completely
@@ -535,12 +563,47 @@ export default function SignFlowHome() {
       // 4. Set mode and default camera facing
       setMode(selectedMode);
       setFacingMode(selectedMode === 'partner' ? 'environment' : 'user');
+      setViewState('live');
     },
     [clearSuggestedRepliesState]
   );
 
-  // END SESSION: Complete teardown of active conversation and all asynchronous resources
+  const handleStartNewSession = useCallback(() => {
+    handleSelectMode('signing');
+  }, [handleSelectMode]);
+
+  // END SESSION: Complete teardown of active conversation and transition to session summary
   const handleEndSession = useCallback(() => {
+    if (!isSessionActiveRef.current && viewState === 'completed') {
+      return;
+    }
+    const endTime = Date.now();
+    const durationSeconds = Math.max(1, Math.round((endTime - sessionStartTimeRef.current) / 1000));
+
+    // Compile confirmed signs sequence from real messages and confirmed events
+    const confirmedList: string[] = [];
+    messages.slice().reverse().forEach((msg) => {
+      if (msg.rawTokens && msg.rawTokens.length > 0) {
+        msg.rawTokens.forEach((tok) => confirmedList.push(tok.toUpperCase()));
+      } else if (msg.text) {
+        msg.text.trim().split(/\s+/).forEach((w) => {
+          const clean = w.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+          if (clean) confirmedList.push(clean);
+        });
+      }
+    });
+
+    if (confirmedList.length === 0 && lastConfirmedSign) {
+      confirmedList.push(lastConfirmedSign.toUpperCase());
+    }
+
+    setSessionStats({
+      durationSeconds,
+      confirmedSigns: confirmedList,
+      startTime: sessionStartTimeRef.current,
+      endTime,
+    });
+
     // 1. Mark session as inactive immediately before initiating async cleanup
     isSessionActiveRef.current = false;
     const endedSessionId = sessionIdRef.current;
@@ -574,26 +637,10 @@ export default function SignFlowHome() {
     // 6. Clear suggested replies and ghost-hand guide
     clearSuggestedRepliesState();
 
-    // 7. Reset transcript and all recognition UI states
-    setMessages([]);
-    setActiveUtterance([]);
-    setCandidateSign(null);
-    setCandidateConfidence(0);
-    setLastConfirmedSign(null);
-    setProvisionalText(null);
-    lastConfirmedSentenceRef.current = null;
-    hadHandsRef.current = false;
-    setHandsDetected(false);
-    setStatusText('Ready to sign');
+    // 7. Transition to completed session summary
     setServiceStatus('disconnected');
-
-    // 8. Reset frame counters
-    frameCounterRef.current = 0;
-    lastFrameTimeRef.current = 0;
-
-    // 9. Reset mode to return to landing surface
-    setMode(null);
-  }, [clearSuggestedRepliesState]);
+    setViewState('completed');
+  }, [messages, lastConfirmedSign, viewState, clearSuggestedRepliesState]);
 
   const handleClearTranscript = useCallback(() => {
     setMessages([]);
@@ -695,13 +742,12 @@ export default function SignFlowHome() {
             </div>
           </div>
 
-          {mode !== null && (
+          {viewState === 'live' && (
             <div className="flex items-center gap-2 shrink-0">
-              {/* Gemini Continuous ASL Badge */}
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100/90 border border-slate-200/80 text-xs font-semibold text-slate-800 shadow-2xs">
+              {/* ASL Live Session Badge */}
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-teal-50 border border-teal-200 text-xs font-semibold text-[#068D9D] shadow-2xs">
                 <span className="w-2 h-2 rounded-full bg-[#068D9D] animate-pulse" aria-hidden="true" />
-                <span>Gemini ASL Continuous</span>
-                <span className="hidden md:inline text-[11px] font-normal text-slate-500">• Flash Latest</span>
+                <span>Live ASL</span>
               </div>
 
               {/* Diagnostics HUD Toggle */}
@@ -733,15 +779,15 @@ export default function SignFlowHome() {
                 <span className="font-medium text-[11px] sm:text-xs">Auto-speak</span>
               </label>
 
-              {/* Change Mode / End Session Button */}
+              {/* End Session Button */}
               <button
                 onClick={handleEndSession}
-                className="min-h-[38px] inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 transition-colors focus-visible:ring-2 focus-visible:ring-[#068D9D]"
-                aria-label="Return to situation selection screen and end session"
+                className="min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200/80 transition-colors focus-visible:ring-2 focus-visible:ring-rose-500"
+                aria-label="End active communication session"
+                title="End communication session"
               >
-                <ArrowLeft className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                <span className="hidden sm:inline">Change Mode</span>
-                <span className="sm:hidden">Mode</span>
+                <Square className="w-3.5 h-3.5 text-rose-600 fill-rose-600 shrink-0" aria-hidden="true" />
+                <span>End Session</span>
               </button>
             </div>
           )}
@@ -750,8 +796,14 @@ export default function SignFlowHome() {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col">
-        {mode === null ? (
-          <LandingSurface onSelectMode={handleSelectMode} />
+        {viewState === 'completed' ? (
+          <SessionSummary
+            durationSeconds={sessionStats?.durationSeconds || 0}
+            confirmedSigns={sessionStats?.confirmedSigns || []}
+            startTime={sessionStats?.startTime}
+            endTime={sessionStats?.endTime}
+            onStartNewSession={handleStartNewSession}
+          />
         ) : (
           <div
             key={currentSessionId || 'active-session'}
@@ -1025,6 +1077,7 @@ export default function SignFlowHome() {
               margin={latestMargin}
               language={selectedLanguage}
               sessionId={currentSessionId || 'default'}
+              features={latestFeaturesRef.current || undefined}
             />
           </div>
         )}

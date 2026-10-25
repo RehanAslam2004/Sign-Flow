@@ -41,9 +41,11 @@ export default function CameraViewport({
 
   const [errorState, setErrorState] = useState<'none' | 'denied' | 'in_use' | 'unavailable'>('none');
   const [isInitializing, setIsInitializing] = useState(true);
+  const currentFacingRef = useRef<'user' | 'environment' | null>(null);
 
   // Reliably release hardware camera lock
   const stopCurrentStream = useCallback(() => {
+    currentFacingRef.current = null;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => {
         try {
@@ -61,8 +63,9 @@ export default function CameraViewport({
 
   const startCamera = useCallback(
     async (facing: 'user' | 'environment') => {
-      // If we already have a live, playing stream, do not reload
+      // If we already have a live, playing stream with the same facing mode, do not reload
       if (
+        currentFacingRef.current === facing &&
         streamRef.current &&
         streamRef.current.active &&
         streamRef.current.getVideoTracks().some((t) => t.readyState === 'live') &&
@@ -111,6 +114,7 @@ export default function CameraViewport({
         }
 
         streamRef.current = acquiredStream;
+        currentFacingRef.current = facing;
 
         if (videoRef.current && acquiredStream) {
           videoRef.current.srcObject = acquiredStream;

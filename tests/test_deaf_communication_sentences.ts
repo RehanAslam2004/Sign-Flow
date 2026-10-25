@@ -57,24 +57,25 @@ const s5 = formatSentence(['YOU', 'HELP'], 'unified', [0.9, 0.9]);
 assert.strictEqual(s5.englishSentence, 'Can you please help me?');
 console.log(`✓ Passed: ['YOU', 'HELP'] -> "${s5.englishSentence}" [Urdu: ${s5.urduSentence}]`);
 
-// Test 6: In-browser classifier heuristics for MEET (two fingers extended)
-console.log('\nTest 6: Client classifier for MEET (2 fingers V-shape)...');
-// Hand with index and middle extended, ring and pinky curled
-const coordsMeet: number[][] = Array.from({ length: 21 }, () => [0, 0, 0]);
-coordsMeet[8] = [0.1, -0.6, 0.0];  // index tip high
-coordsMeet[6] = [0.1, -0.3, 0.0];  // index PIP
-coordsMeet[12] = [0.2, -0.6, 0.0]; // middle tip high
-coordsMeet[10] = [0.2, -0.3, 0.0]; // middle PIP
-coordsMeet[16] = [0.3, -0.1, 0.0]; // ring tip down
-coordsMeet[14] = [0.3, -0.2, 0.0]; // ring PIP
-coordsMeet[20] = [0.4, -0.1, 0.0]; // pinky tip down
-coordsMeet[18] = [0.4, -0.2, 0.0]; // pinky PIP
-coordsMeet[4] = [0.0, -0.1, 0.0];  // thumb curled
-coordsMeet[3] = [0.05, -0.1, 0.0];
+// Test 6: In-browser classifier heuristics for NO (index + middle snapping to thumb)
+console.log('\nTest 6: Client classifier for NO (index + middle snapping to thumb)...');
+const coordsNo: number[][] = Array.from({ length: 21 }, () => [0, 0, 0]);
+coordsNo[0] = [0.0, 0.0, 0.0];    // wrist
+coordsNo[1] = [0.08, -0.2, 0.0];  // thumb CMC
+coordsNo[2] = [0.10, -0.3, 0.0];  // thumb MCP
+coordsNo[5] = [0.15, -0.4, 0.0];  // index MCP
+coordsNo[9] = [0.22, -0.4, 0.0];  // middle MCP
+coordsNo[13] = [0.28, -0.35, 0.0]; // ring MCP
+coordsNo[17] = [0.34, -0.3, 0.0]; // pinky MCP
+coordsNo[8] = [0.18, -0.6, 0.0];  // index tip
+coordsNo[12] = [0.20, -0.6, 0.0]; // middle tip
+coordsNo[4] = [0.17, -0.58, 0.0]; // thumb tip touching index/middle
+coordsNo[16] = [0.28, -0.2, 0.0]; // ring curled
+coordsNo[20] = [0.34, -0.15, 0.0]; // pinky curled
 
-const predMeet = classifyHandFeatures(coordsMeet);
-assert.strictEqual(predMeet.sign, 'MEET');
-assert.strictEqual(predMeet.status, 'recognized');
-console.log(`✓ Passed: 2 fingers V-shape recognized as "${predMeet.sign}" (conf: ${predMeet.confidence})`);
+const predNo = classifyHandFeatures(coordsNo);
+assert.strictEqual(predNo.sign, 'NO');
+assert.strictEqual(predNo.status, 'recognized');
+console.log(`✓ Passed: Index and middle snapping to thumb recognized as "${predNo.sign}" (conf: ${predNo.confidence})`);
 
 console.log('\n=== All Deaf Practical Sentences Tests Passed! ===\n');

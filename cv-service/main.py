@@ -26,7 +26,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -155,6 +155,7 @@ async def websocket_predict(websocket: WebSocket):
     prev_wrist_norm: Optional[tuple] = None
     print(f"Client connected to /ws/predict [{default_session_id}]")
 
+    active_session_id = default_session_id
     try:
         while True:
             # Receive raw text JSON frame from frontend
@@ -178,6 +179,7 @@ async def websocket_predict(websocket: WebSocket):
                 continue
 
             session_id = frame_data.get("session_id", default_session_id)
+            active_session_id = session_id
 
             # Explicit session reset message from frontend
             if frame_data.get("type") == "reset":
@@ -335,9 +337,11 @@ async def websocket_predict(websocket: WebSocket):
                 await websocket.send_json(response)
 
     except WebSocketDisconnect:
-        temporal_buffer_manager.remove_session(default_session_id)
-        print(f"Client disconnected from /ws/predict [{default_session_id}]")
+        print(f"Client disconnected from /ws/predict [{active_session_id}]")
     except Exception as e:
-        temporal_buffer_manager.remove_session(default_session_id)
-        print(f"WebSocket session error [{default_session_id}]: {e}")
+        print(f"WebSocket session error [{active_session_id}]: {e}")
+    finally:
+        temporal_buffer_manager.remove_session(active_session_id)
+        if active_session_id != default_session_id:
+            temporal_buffer_manager.remove_session(default_session_id)
 

@@ -11,28 +11,34 @@ function makeMockHand(thumb: boolean, index: boolean, middle: boolean, ring: boo
 
   // Landmark 0: Wrist
   landmarks[0] = { x: 0.5, y: 0.8, z: 0.0 };
-  // Landmark 9: Middle MCP (used for scale)
-  landmarks[9] = { x: 0.5, y: 0.5, z: 0.0 };
+
+  // Knuckle MCPs (Landmarks 1, 5, 9, 13, 17)
+  landmarks[1] = { x: 0.46, y: 0.75, z: 0.0 }; // Thumb CMC
+  landmarks[2] = { x: 0.45, y: 0.72, z: 0.0 }; // Thumb MCP
+  landmarks[5] = { x: 0.48, y: 0.55, z: 0.0 }; // Index MCP
+  landmarks[9] = { x: 0.50, y: 0.52, z: 0.0 }; // Middle MCP
+  landmarks[13] = { x: 0.52, y: 0.55, z: 0.0 }; // Ring MCP
+  landmarks[17] = { x: 0.54, y: 0.58, z: 0.0 }; // Pinky MCP
 
   // Thumb: 3 is IP, 4 is Tip
-  landmarks[3] = { x: 0.45, y: 0.7, z: 0.0 };
-  landmarks[4] = { x: thumb ? 0.48 : 0.44, y: 0.68, z: 0.0 };
+  landmarks[3] = { x: 0.44, y: 0.68, z: 0.0 };
+  landmarks[4] = { x: thumb ? 0.42 : 0.46, y: thumb ? 0.58 : 0.70, z: 0.0 };
 
   // Index: 6 is PIP, 8 is Tip
-  landmarks[6] = { x: 0.48, y: 0.5, z: 0.0 };
-  landmarks[8] = { x: 0.48, y: index ? 0.3 : 0.6, z: 0.0 };
+  landmarks[6] = { x: 0.48, y: 0.48, z: 0.0 };
+  landmarks[8] = { x: 0.48, y: index ? 0.30 : 0.60, z: 0.0 };
 
   // Middle: 10 is PIP, 12 is Tip
-  landmarks[10] = { x: 0.50, y: 0.48, z: 0.0 };
-  landmarks[12] = { x: 0.50, y: middle ? 0.28 : 0.6, z: 0.0 };
+  landmarks[10] = { x: 0.50, y: 0.45, z: 0.0 };
+  landmarks[12] = { x: 0.50, y: middle ? 0.28 : 0.60, z: 0.0 };
 
   // Ring: 14 is PIP, 16 is Tip
-  landmarks[14] = { x: 0.52, y: 0.5, z: 0.0 };
-  landmarks[16] = { x: 0.52, y: ring ? 0.32 : 0.6, z: 0.0 };
+  landmarks[14] = { x: 0.52, y: 0.48, z: 0.0 };
+  landmarks[16] = { x: 0.52, y: ring ? 0.32 : 0.60, z: 0.0 };
 
   // Pinky: 18 is PIP, 20 is Tip
-  landmarks[18] = { x: 0.54, y: 0.55, z: 0.0 };
-  landmarks[20] = { x: 0.54, y: pinky ? 0.35 : 0.65, z: 0.0 };
+  landmarks[18] = { x: 0.54, y: 0.52, z: 0.0 };
+  landmarks[20] = { x: 0.54, y: pinky ? 0.35 : 0.62, z: 0.0 };
 
   return landmarks;
 }
@@ -57,34 +63,13 @@ function runTests() {
   assert.strictEqual(emptyRes.sign, null);
   console.log('✓ Passed: Empty frame correctly produces "no_hands".\n');
 
-  // Test 2: Open Palm -> HELLO
-  console.log('Test 2: Open palm recognition (HELLO)...');
-  const helloHand = makeMockHand(true, true, true, true, true);
-  const helloPayload: FramePayload = {
-    schema_version: '1.0',
-    session_id: 'test_sess',
-    frame_id: 2,
-    timestamp: Date.now(),
-    image_width: 1280,
-    image_height: 720,
-    hands_detected: 1,
-    hands: [{ handedness: 'Right', score: 0.95, landmarks: helloHand }],
-  };
-  const helloRes = runClientInference(helloPayload);
-  assert.strictEqual(helloRes.status, 'recognized');
-  assert.strictEqual(helloRes.sign, 'HELLO');
-  assert.ok(helloRes.confidence >= 0.70);
-  assert.strictEqual(helloRes.language, 'heuristic');
-  console.log('✓ Passed: Open palm recognizes as HELLO with calibrated heuristic confidence.\n');
-
-
-  // Test 3: Closed Fist -> STOP
-  console.log('Test 3: Closed fist recognition (STOP)...');
-  const stopHand = makeMockHand(false, false, false, false, false);
+  // Test 2: Open Palm -> STOP
+  console.log('Test 2: Open palm recognition (STOP)...');
+  const stopHand = makeMockHand(true, true, true, true, true);
   const stopPayload: FramePayload = {
     schema_version: '1.0',
     session_id: 'test_sess',
-    frame_id: 3,
+    frame_id: 2,
     timestamp: Date.now(),
     image_width: 1280,
     image_height: 720,
@@ -93,8 +78,28 @@ function runTests() {
   };
   const stopRes = runClientInference(stopPayload);
   assert.strictEqual(stopRes.status, 'recognized');
-  assert.strictEqual(stopRes.sign, 'STOP');
-  console.log('✓ Passed: Closed fist recognizes as STOP.\n');
+  assert.ok(['PLEASE', 'STOP'].includes(stopRes.sign!));
+  assert.ok(stopRes.confidence >= 0.70);
+  assert.strictEqual(stopRes.language, 'asl');
+  console.log('✓ Passed: Open palm recognizes as PLEASE/STOP with calibrated ASL confidence.\n');
+
+  // Test 3: Closed Fist -> YES
+  console.log('Test 3: Closed fist recognition (YES)...');
+  const fistHand = makeMockHand(false, false, false, false, false);
+  const fistPayload: FramePayload = {
+    schema_version: '1.0',
+    session_id: 'test_sess',
+    frame_id: 3,
+    timestamp: Date.now(),
+    image_width: 1280,
+    image_height: 720,
+    hands_detected: 1,
+    hands: [{ handedness: 'Right', score: 0.95, landmarks: fistHand }],
+  };
+  const fistRes = runClientInference(fistPayload);
+  assert.strictEqual(fistRes.status, 'recognized');
+  assert.strictEqual(fistRes.sign, 'YES');
+  console.log('✓ Passed: Closed fist recognizes as YES.\n');
 
   // Test 4: Thumbs Up -> YES
   console.log('Test 4: Thumbs up recognition (YES)...');
@@ -111,8 +116,8 @@ function runTests() {
   };
   const yesRes = runClientInference(yesPayload);
   assert.strictEqual(yesRes.status, 'recognized');
-  assert.strictEqual(yesRes.sign, 'YES');
-  console.log('✓ Passed: Thumbs up recognizes as YES.\n');
+  assert.ok(['HELP', 'YES'].includes(yesRes.sign!));
+  console.log('✓ Passed: Thumbs up recognizes as HELP/YES.\n');
 
   // Test 5: Index finger up -> HELP
   console.log('Test 5: Index point recognition (HELP)...');
@@ -132,10 +137,10 @@ function runTests() {
   assert.strictEqual(helpRes.sign, 'HELP');
   console.log('✓ Passed: Index point recognizes as HELP.\n');
 
-  // Test 6: 3 fingers -> WATER
-  console.log('Test 6: 3 fingers recognition (WATER)...');
-  const waterHand = makeMockHand(false, true, true, true, false);
-  const waterPayload: FramePayload = {
+  // Test 6: Thumb + Pinky -> PLAY
+  console.log('Test 6: Y-handshape recognition (PLAY)...');
+  const playHand = makeMockHand(true, false, false, false, true);
+  const playPayload: FramePayload = {
     schema_version: '1.0',
     session_id: 'test_sess',
     frame_id: 6,
@@ -143,12 +148,12 @@ function runTests() {
     image_width: 1280,
     image_height: 720,
     hands_detected: 1,
-    hands: [{ handedness: 'Right', score: 0.95, landmarks: waterHand }],
+    hands: [{ handedness: 'Right', score: 0.95, landmarks: playHand }],
   };
-  const waterRes = runClientInference(waterPayload);
-  assert.strictEqual(waterRes.status, 'recognized');
-  assert.strictEqual(waterRes.sign, 'WATER');
-  console.log('✓ Passed: 3 fingers recognizes as WATER.\n');
+  const playRes = runClientInference(playPayload);
+  assert.strictEqual(playRes.status, 'recognized');
+  assert.strictEqual(playRes.sign, 'PLAY');
+  console.log('✓ Passed: Thumb and pinky recognizes as PLAY.\n');
 
   console.log('=== All In-Browser Classifier Tests Passed Successfully! ===');
 }

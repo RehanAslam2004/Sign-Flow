@@ -178,229 +178,346 @@ export function classifyHandFeatures(
   }
 
   const coords = normalizedCoords;
+  const wrist = coords[0];
+  const thumbCmc = coords[1], thumbMcp = coords[2], thumbTip = coords[4];
+  const indexMcp = coords[5], indexPip = coords[6], indexTip = coords[8];
+  const middleMcp = coords[9], middlePip = coords[10], middleTip = coords[12];
+  const ringMcp = coords[13], ringPip = coords[14], ringTip = coords[16];
+  const pinkyMcp = coords[17], pinkyPip = coords[18], pinkyTip = coords[20];
 
-  // Finger extension checks (in normalized coords, negative y is higher in camera image):
-  // Post-chirality flip, all hands are aligned to right-hand manifold where thumb extends toward +X.
-  const thumbExt = coords[4][0] > coords[3][0];
-  const indexExt = coords[8][1] < coords[6][1];
-  const middleExt = coords[12][1] < coords[10][1];
-  const ringExt = coords[16][1] < coords[14][1];
-  const pinkyExt = coords[20][1] < coords[18][1];
+  const palmScale = Math.hypot(middleMcp[0] - wrist[0], middleMcp[1] - wrist[1], middleMcp[2] - wrist[2]) || 1.0;
 
-  const extendedFingers = [indexExt, middleExt, ringExt, pinkyExt];
-  const extendedCount = extendedFingers.filter(Boolean).length;
+  function dist(p1: number[], p2: number[]): number {
+    return Math.hypot(p1[0] - p2[0], p1[1] - p2[1], p1[2] - p2[2]) / palmScale;
+  }
 
-  // Direction vector of index finger in normalized space
-  const indexDz = coords[8][2] - coords[5][2];
-  const indexDy = coords[8][1] - coords[5][1];
+  function fingerCurlRatio(tip: number[], mcp: number[]): number {
+    const tipWrist = Math.hypot(tip[0] - wrist[0], tip[1] - wrist[1], tip[2] - wrist[2]);
+    const mcpWrist = Math.max(Math.hypot(mcp[0] - wrist[0], mcp[1] - wrist[1], mcp[2] - wrist[2]), 1e-4);
+    return tipWrist / mcpWrist;
+  }
 
-  if (extendedCount === 4 && thumbExt) {
+  function isFingerExtended(tip: number[], pip: number[], mcp: number[]): boolean {
+    const tipWrist = Math.hypot(tip[0] - wrist[0], tip[1] - wrist[1], tip[2] - wrist[2]);
+    const mcpWrist = Math.hypot(mcp[0] - wrist[0], mcp[1] - wrist[1], mcp[2] - wrist[2]);
+    const pipWrist = Math.hypot(pip[0] - wrist[0], pip[1] - wrist[1], pip[2] - wrist[2]);
+    return tipWrist > 1.25 * mcpWrist && tipWrist > pipWrist;
+  }
+
+  const indexExt = isFingerExtended(indexTip, indexPip, indexMcp);
+  const middleExt = isFingerExtended(middleTip, middlePip, middleMcp);
+  const ringExt = isFingerExtended(ringTip, ringPip, ringMcp);
+  const pinkyExt = isFingerExtended(pinkyTip, pinkyPip, pinkyMcp);
+
+  const thumbWristDist = Math.hypot(thumbTip[0] - wrist[0], thumbTip[1] - wrist[1], thumbTip[2] - wrist[2]);
+  const thumbMcpDist = Math.hypot(thumbMcp[0] - wrist[0], thumbMcp[1] - wrist[1], thumbMcp[2] - wrist[2]);
+  const thumbExt = thumbWristDist > 1.25 * thumbMcpDist && thumbTip[1] < thumbMcp[1];
+
+  const indexCurl = fingerCurlRatio(indexTip, indexMcp);
+  const middleCurl = fingerCurlRatio(middleTip, middleMcp);
+  const ringCurl = fingerCurlRatio(ringTip, ringMcp);
+  const pinkyCurl = fingerCurlRatio(pinkyTip, pinkyMcp);
+
+  const curledCount = [indexCurl < 1.25, middleCurl < 1.25, ringCurl < 1.25, pinkyCurl < 1.25].filter(Boolean).length;
+  const extendedCount = [indexExt, middleExt, ringExt, pinkyExt].filter(Boolean).length;
+
+  const dThumbIndex = dist(thumbTip, indexTip);
+  const dThumbMiddle = dist(thumbTip, middleTip);
+
+  const allTips = [thumbTip, indexTip, middleTip, ringTip, pinkyTip];
+  const tipCenterX = allTips.reduce((s, t) => s + t[0], 0) / 5;
+  const tipCenterY = allTips.reduce((s, t) => s + t[1], 0) / 5;
+  const tipCenterZ = allTips.reduce((s, t) => s + t[2], 0) / 5;
+  const maxTipSpread = Math.max(
+    ...allTips.map((t) => Math.hypot(t[0] - tipCenterX, t[1] - tipCenterY, t[2] - tipCenterZ) / palmScale)
+  );
+
+  const avgY = rawLandmarks && rawLandmarks.length > 0 ? rawLandmarks.reduce((s, pt) => s + pt.y, 0) / rawLandmarks.length : 0.5;
+
+  // Palm normal vector
+  const v1 = [indexMcp[0] - wrist[0], indexMcp[1] - wrist[1], indexMcp[2] - wrist[2]];
+  const v2 = [pinkyMcp[0] - wrist[0], pinkyMcp[1] - wrist[1], pinkyMcp[2] - wrist[2]];
+  const cross = [
+    v1[1] * v2[2] - v1[2] * v2[1],
+    v1[2] * v2[0] - v1[0] * v2[2],
+    v1[0] * v2[1] - v1[1] * v2[0],
+  ];
+  const normCross = Math.hypot(cross[0], cross[1], cross[2]) || 1.0;
+  const palmNormal = [cross[0] / normCross, cross[1] / normCross, cross[2] / normCross];
+
+  // 1. PLAY: "Y" handshape (Thumb and Pinky extended, middle 3 curled)
+  if (thumbExt && pinkyExt && !middleExt && !ringExt && indexCurl < 1.20) {
     return {
       status: 'recognized',
-      sign: 'HELLO',
-      confidence: 0.72,
-      margin: 0.25,
+      sign: 'PLAY',
+      confidence: 0.90,
+      margin: 0.40,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'HELLO', confidence: 0.72 },
-        { sign: 'WATER', confidence: 0.45 },
-        { sign: 'YES', confidence: 0.12 },
+        { sign: 'PLAY', confidence: 0.90 },
+        { sign: 'YES', confidence: 0.40 },
       ],
-      language: 'heuristic',
+      gesture_type: 'y_handshape',
+      language: 'asl',
     };
-  } else if (extendedCount === 0 && !thumbExt) {
+  }
+
+  // 2. NO: 3-finger pinch (Index + Middle extended with tips touching Thumb tip)
+  if (
+    curledCount < 4 &&
+    dThumbIndex < 0.40 &&
+    dThumbMiddle < 0.45 &&
+    ringCurl < 1.25 &&
+    pinkyCurl < 1.25 &&
+    !ringExt &&
+    !pinkyExt
+  ) {
     return {
       status: 'recognized',
-      sign: 'STOP',
-      confidence: 0.70,
-      margin: 0.25,
+      sign: 'NO',
+      confidence: 0.88,
+      margin: 0.35,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'STOP', confidence: 0.70 },
-        { sign: 'YES', confidence: 0.45 },
-        { sign: 'HELP', confidence: 0.15 },
+        { sign: 'NO', confidence: 0.88 },
+        { sign: 'MORE', confidence: 0.45 },
       ],
-      language: 'heuristic',
+      gesture_type: 'three_finger_pinch',
+      language: 'asl',
     };
-  } else if (extendedCount === 0 && thumbExt) {
+  }
+
+  // 3. HELP: Thumbs up upright, all 4 fingers curled
+  const thumbPointingUp = (thumbTip[1] - thumbMcp[1]) < -0.15 * palmScale;
+  if (curledCount === 4 && thumbExt && thumbPointingUp) {
+    return {
+      status: 'recognized',
+      sign: 'HELP',
+      confidence: 0.88,
+      margin: 0.32,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'HELP', confidence: 0.88 },
+        { sign: 'YES', confidence: 0.50 },
+      ],
+      gesture_type: 'thumb_up',
+      language: 'asl',
+    };
+  }
+
+  // 4. YES: Closed fist (0 fingers extended, thumb folded)
+  if (curledCount === 4 && !thumbExt) {
     return {
       status: 'recognized',
       sign: 'YES',
-      confidence: 0.70,
-      margin: 0.25,
+      confidence: 0.86,
+      margin: 0.30,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'YES', confidence: 0.70 },
-        { sign: 'STOP', confidence: 0.45 },
-        { sign: 'HELLO', confidence: 0.10 },
+        { sign: 'YES', confidence: 0.86 },
+        { sign: 'RESTROOM', confidence: 0.42 },
       ],
-      language: 'heuristic',
+      gesture_type: 'closed_fist',
+      language: 'asl',
     };
-  } else if (indexExt && !middleExt && !ringExt && !pinkyExt) {
-    // Kinematic index pointing evaluation from normalized coordinates
-    if (indexDz < -0.20) {
-      // Pointing toward camera / addressee (YOU / Ap)
+  }
+
+  // 5. Index Finger Pointing: Forward -> YOU / GO
+  const vIndex = [indexTip[0] - indexMcp[0], indexTip[1] - indexMcp[1], indexTip[2] - indexMcp[2]];
+  const normVIndex = Math.hypot(vIndex[0], vIndex[1], vIndex[2]) || 1.0;
+  const vIndexNorm = [vIndex[0] / normVIndex, vIndex[1] / normVIndex, vIndex[2] / normVIndex];
+
+  if (indexExt && !middleExt && !ringExt && !pinkyExt) {
+    if (vIndexNorm[2] < -0.20 || (Math.abs(vIndexNorm[0]) > 0.6 && vIndexNorm[1] < 0.2)) {
       return {
         status: 'recognized',
-        sign: 'Ap',
-        confidence: 0.68,
-        margin: 0.22,
+        sign: 'YOU',
+        confidence: 0.88,
+        margin: 0.32,
         is_candidate: true,
         message: null,
         top_candidates: [
-          { sign: 'Ap', confidence: 0.68 },
-          { sign: 'YOU', confidence: 0.64 },
-          { sign: 'HELP', confidence: 0.20 },
+          { sign: 'YOU', confidence: 0.88 },
+          { sign: 'GO', confidence: 0.65 },
         ],
-        gesture_type: 'point_addressee',
-        language: 'heuristic',
+        gesture_type: 'index_pointing_forward',
+        language: 'asl',
       };
-    } else if (indexDz > 0.10 || (indexDy > 0.30 && indexDz > -0.05)) {
-      // Pointing toward self / torso (ME / Mujhay)
-      return {
-        status: 'recognized',
-        sign: 'Mujhay',
-        confidence: 0.68,
-        margin: 0.22,
-        is_candidate: true,
-        message: null,
-        top_candidates: [
-          { sign: 'Mujhay', confidence: 0.68 },
-          { sign: 'ME', confidence: 0.64 },
-          { sign: 'HELP', confidence: 0.20 },
-        ],
-        gesture_type: 'point_self',
-        language: 'heuristic',
-      };
-    } else {
-      // Pointing upward (HELP / Alif)
+    } else if (vIndexNorm[1] < -0.5) {
       return {
         status: 'recognized',
         sign: 'HELP',
-        confidence: 0.68,
-        margin: 0.20,
+        confidence: 0.82,
+        margin: 0.25,
         is_candidate: true,
         message: null,
         top_candidates: [
-          { sign: 'HELP', confidence: 0.68 },
-          { sign: 'Alif', confidence: 0.62 },
-          { sign: 'WATER', confidence: 0.25 },
+          { sign: 'HELP', confidence: 0.82 },
+          { sign: 'YOU', confidence: 0.40 },
         ],
-        gesture_type: 'point_up',
-        language: 'heuristic',
+        gesture_type: 'index_pointing_up',
+        language: 'asl',
       };
     }
-  } else if (indexExt && middleExt && !ringExt && !pinkyExt) {
-    // Two fingers extended (V / Peace) -> MEET
+  }
+
+  // 6. RESTROOM: "T" handshape (Thumb between index & middle knuckles)
+  if (
+    curledCount === 4 &&
+    !indexExt &&
+    !thumbExt &&
+    Math.abs(thumbTip[0] - (indexPip[0] + middlePip[0]) / 2.0) < 0.25 * palmScale &&
+    thumbTip[1] < indexPip[1] + 0.1 * palmScale
+  ) {
     return {
       status: 'recognized',
-      sign: 'MEET',
-      confidence: 0.70,
-      margin: 0.22,
+      sign: 'RESTROOM',
+      confidence: 0.85,
+      margin: 0.30,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'MEET', confidence: 0.70 },
-        { sign: 'NICE', confidence: 0.45 },
-        { sign: 'Ap', confidence: 0.20 },
+        { sign: 'RESTROOM', confidence: 0.85 },
+        { sign: 'YES', confidence: 0.45 },
       ],
-      language: 'heuristic',
-    };
-  } else if (indexExt && middleExt && ringExt && !pinkyExt) {
-    return {
-      status: 'recognized',
-      sign: 'WATER',
-      confidence: 0.68,
-      margin: 0.22,
-      is_candidate: true,
-      message: null,
-      top_candidates: [
-        { sign: 'WATER', confidence: 0.68 },
-        { sign: 'HELLO', confidence: 0.45 },
-        { sign: 'HELP', confidence: 0.20 },
-      ],
-      language: 'heuristic',
-    };
-  } else {
-    // Check for pinch gesture (Pill / Medicine / Dawa)
-    const pinchDist = Math.hypot(
-      coords[4][0] - coords[8][0],
-      coords[4][1] - coords[8][1],
-      coords[4][2] - coords[8][2]
-    );
-
-    if (pinchDist < 0.38 && !middleExt && !ringExt && !pinkyExt) {
-      return {
-        status: 'recognized',
-        sign: 'MEDICINE',
-        confidence: 0.70,
-        margin: 0.22,
-        is_candidate: true,
-        message: null,
-        top_candidates: [
-          { sign: 'MEDICINE', confidence: 0.70 },
-          { sign: 'Dawa', confidence: 0.65 },
-          { sign: 'BUY', confidence: 0.30 },
-        ],
-        language: 'heuristic',
-      };
-    }
-
-    // Check for chest contact / sick state (Bemar / ILL)
-    if (extendedCount >= 3 && coords[12][2] > 0.12) {
-      return {
-        status: 'recognized',
-        sign: 'Bemar',
-        confidence: 0.70,
-        margin: 0.22,
-        is_candidate: true,
-        message: null,
-        top_candidates: [
-          { sign: 'Bemar', confidence: 0.70 },
-          { sign: 'ILL', confidence: 0.65 },
-          { sign: 'Mujhay', confidence: 0.40 },
-        ],
-        language: 'heuristic',
-      };
-    }
-
-    // Check for open offer / Buy gesture (flat palm facing forward/up)
-    if (extendedCount === 4 && !thumbExt && coords[8][2] < -0.10) {
-      return {
-        status: 'recognized',
-        sign: 'BUY',
-        confidence: 0.68,
-        margin: 0.20,
-        is_candidate: true,
-        message: null,
-        top_candidates: [
-          { sign: 'BUY', confidence: 0.68 },
-          { sign: 'Kharidna', confidence: 0.62 },
-          { sign: 'MEDICINE', confidence: 0.35 },
-        ],
-        language: 'heuristic',
-      };
-    }
-
-    // Ambiguous posture or transition in progress
-    return {
-      status: 'candidate',
-      sign: 'RECOGNIZING',
-      confidence: 0.50,
-      margin: 0.05,
-      is_candidate: true,
-      message: 'Sign candidate in progress',
-      rejection_reason: 'ambiguous_margin',
-      top_candidates: [
-        { sign: 'RECOGNIZING', confidence: 0.50 },
-        { sign: 'UNCERTAIN', confidence: 0.45 },
-      ],
-      language: 'heuristic',
+      gesture_type: 't_handshape',
+      language: 'asl',
     };
   }
+
+  // 7. MORE / EAT: 5 fingertips cluster
+  if (maxTipSpread < 0.45 && curledCount < 4) {
+    if (avgY < 0.40) {
+      return {
+        status: 'recognized',
+        sign: 'EAT',
+        confidence: 0.86,
+        margin: 0.30,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'EAT', confidence: 0.86 },
+          { sign: 'MORE', confidence: 0.55 },
+        ],
+        gesture_type: 'cluster_at_mouth',
+        language: 'asl',
+      };
+    } else {
+      return {
+        status: 'recognized',
+        sign: 'MORE',
+        confidence: 0.87,
+        margin: 0.30,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'MORE', confidence: 0.87 },
+          { sign: 'EAT', confidence: 0.55 },
+        ],
+        gesture_type: 'fingertip_cluster',
+        language: 'asl',
+      };
+    }
+  }
+
+  // 8. DRINK: "C" cup handshape
+  const dCGap = dist(thumbTip, indexTip);
+  const isCShape =
+    dCGap > 0.35 &&
+    dCGap < 0.75 &&
+    indexCurl > 1.10 &&
+    indexCurl < 1.50 &&
+    middleCurl > 1.10 &&
+    middleCurl < 1.50 &&
+    ringCurl > 1.10 &&
+    ringCurl < 1.50 &&
+    !indexExt;
+
+  if (isCShape && avgY < 0.60) {
+    return {
+      status: 'recognized',
+      sign: 'DRINK',
+      confidence: 0.84,
+      margin: 0.28,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'DRINK', confidence: 0.84 },
+        { sign: 'MORE', confidence: 0.40 },
+      ],
+      gesture_type: 'c_cup_handshape',
+      language: 'asl',
+    };
+  }
+
+  // 9. STOP / PLEASE / THANK YOU: Open flat hand (4 fingers extended)
+  if (extendedCount === 4) {
+    if (palmNormal[2] > 0.40 && avgY > 0.40) {
+      return {
+        status: 'recognized',
+        sign: 'PLEASE',
+        confidence: 0.84,
+        margin: 0.26,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'PLEASE', confidence: 0.84 },
+          { sign: 'THANK YOU', confidence: 0.50 },
+        ],
+        gesture_type: 'flat_hand_chest',
+        language: 'asl',
+      };
+    } else if (avgY < 0.42) {
+      return {
+        status: 'recognized',
+        sign: 'THANK YOU',
+        confidence: 0.85,
+        margin: 0.28,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'THANK YOU', confidence: 0.85 },
+          { sign: 'STOP', confidence: 0.45 },
+        ],
+        gesture_type: 'flat_hand_chin',
+        language: 'asl',
+      };
+    } else {
+      return {
+        status: 'recognized',
+        sign: 'STOP',
+        confidence: 0.86,
+        margin: 0.30,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'STOP', confidence: 0.86 },
+          { sign: 'THANK YOU', confidence: 0.50 },
+        ],
+        gesture_type: 'flat_hand_vertical',
+        language: 'asl',
+      };
+    }
+  }
+
+  return {
+    status: 'candidate',
+    sign: 'RECOGNIZING',
+    confidence: 0.45,
+    margin: 0.05,
+    is_candidate: true,
+    message: 'Sign candidate in progress',
+    rejection_reason: 'ambiguous_margin',
+    top_candidates: [
+      { sign: 'RECOGNIZING', confidence: 0.45 },
+      { sign: 'UNCERTAIN', confidence: 0.35 },
+    ],
+    language: 'asl',
+  };
 }
 
 /**
