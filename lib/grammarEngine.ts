@@ -39,6 +39,164 @@ interface GrammarRule {
 // ---------------------------------------------------------------------------
 
 const GRAMMAR_RULES: GrammarRule[] = [
+  // === Practical Deaf Assistance: Health & Pharmacy ===
+  {
+    id: 'i_am_ill_buy_medicine_full_psl',
+    pattern: ['Mujhay', 'Bemar', 'Dawa', 'Kharidna'],
+    urduTemplate: 'میں بیمار ہوں، مجھے دوا خریدنی ہے',
+    englishTemplate: 'I am ill, I want to buy medicine.',
+    priority: 120,
+  },
+  {
+    id: 'i_am_ill_buy_medicine_full_en',
+    pattern: ['ME', 'Bemar', 'MEDICINE', 'BUY'],
+    urduTemplate: 'میں بیمار ہوں، مجھے دوا خریدنی ہے',
+    englishTemplate: 'I am ill, I want to buy medicine.',
+    priority: 120,
+  },
+  {
+    id: 'i_am_ill_need_medicine_psl',
+    pattern: ['Mujhay', 'Bemar', 'Dawa'],
+    urduTemplate: 'میں بیمار ہوں، مجھے دوا چاہیے',
+    englishTemplate: 'I am ill, I need medicine.',
+    priority: 115,
+  },
+  {
+    id: 'i_am_ill_need_medicine_en',
+    pattern: ['ME', 'Bemar', 'MEDICINE'],
+    urduTemplate: 'میں بیمار ہوں، مجھے دوا چاہیے',
+    englishTemplate: 'I am ill, I need medicine.',
+    priority: 115,
+  },
+  {
+    id: 'ill_buy_medicine_combo',
+    pattern: ['Bemar', 'MEDICINE', 'BUY'],
+    urduTemplate: 'بیمار ہوں، دوا خریدنی ہے',
+    englishTemplate: 'I am ill, I want to buy medicine.',
+    priority: 110,
+  },
+  {
+    id: 'ill_buy_medicine_psl',
+    pattern: ['Bemar', 'Dawa', 'Kharidna'],
+    urduTemplate: 'بیمار ہوں، دوا خریدنی ہے',
+    englishTemplate: 'I am ill, I want to buy medicine.',
+    priority: 110,
+  },
+  {
+    id: 'want_buy_medicine_en',
+    pattern: ['MEDICINE', 'BUY'],
+    urduTemplate: 'مجھے دوا خریدنی ہے',
+    englishTemplate: 'I want to buy medicine.',
+    priority: 105,
+  },
+  {
+    id: 'want_buy_medicine_psl',
+    pattern: ['Dawa', 'Kharidna'],
+    urduTemplate: 'مجھے دوا خریدنی ہے',
+    englishTemplate: 'I want to buy medicine.',
+    priority: 105,
+  },
+  {
+    id: 'need_medicine_psl',
+    pattern: ['Mujhay', 'Dawa'],
+    urduTemplate: 'مجھے دوا چاہیے',
+    englishTemplate: 'I need medicine.',
+    priority: 100,
+  },
+  {
+    id: 'need_medicine_en',
+    pattern: ['ME', 'MEDICINE'],
+    urduTemplate: 'مجھے دوا چاہیے',
+    englishTemplate: 'I need medicine.',
+    priority: 100,
+  },
+
+  // === Practical Deaf Assistance: Introductions & Greetings ===
+  {
+    id: 'nice_to_meet_you_full_en',
+    pattern: ['NICE', 'MEET', 'YOU'],
+    urduTemplate: 'آپ سے مل کر بہت خوشی ہوئی',
+    englishTemplate: 'Nice to meet you.',
+    priority: 115,
+  },
+  {
+    id: 'nice_to_meet_you_ap',
+    pattern: ['NICE', 'MEET', 'Ap'],
+    urduTemplate: 'آپ سے مل کر بہت خوشی ہوئی',
+    englishTemplate: 'Nice to meet you.',
+    priority: 115,
+  },
+  {
+    id: 'nice_to_meet_you_short',
+    pattern: ['NICE', 'MEET'],
+    urduTemplate: 'آپ سے مل کر خوشی ہوئی',
+    englishTemplate: 'Nice to meet you.',
+    priority: 110,
+  },
+  {
+    id: 'good_meet_you',
+    pattern: ['GOOD', 'MEET', 'YOU'],
+    urduTemplate: 'آپ سے مل کر اچھا لگا',
+    englishTemplate: 'Good to meet you.',
+    priority: 110,
+  },
+  {
+    id: 'meet_you_en',
+    pattern: ['MEET', 'YOU'],
+    urduTemplate: 'آپ سے ملنا ہوا',
+    englishTemplate: 'Nice to meet you.',
+    priority: 105,
+  },
+  {
+    id: 'meet_you_ap',
+    pattern: ['MEET', 'Ap'],
+    urduTemplate: 'آپ سے ملنا ہوا',
+    englishTemplate: 'Nice to meet you.',
+    priority: 105,
+  },
+  {
+    id: 'hello_how_are_you_asl',
+    pattern: ['HELLO', 'YOU'],
+    urduTemplate: 'ہیلو، آپ کیسے ہیں؟',
+    englishTemplate: 'Hello, how are you?',
+    priority: 105,
+  },
+  {
+    id: 'hello_how_are_you_ap',
+    pattern: ['HELLO', 'Ap'],
+    urduTemplate: 'ہیلو، آپ کیسے ہیں؟',
+    englishTemplate: 'Hello, how are you?',
+    priority: 105,
+  },
+  {
+    id: 'hello_ap_psl',
+    pattern: ['Assalamulaikum', 'Ap'],
+    urduTemplate: 'السلام علیکم، آپ کیسے ہیں؟',
+    englishTemplate: 'Hello, how are you?',
+    priority: 105,
+  },
+  {
+    id: 'can_you_help_me_psl',
+    pattern: ['Ap', 'HELP'],
+    urduTemplate: 'کیا آپ میری مدد کر سکتے ہیں؟',
+    englishTemplate: 'Can you please help me?',
+    priority: 100,
+  },
+  {
+    id: 'can_you_help_me_en',
+    pattern: ['YOU', 'HELP'],
+    urduTemplate: 'کیا آپ میری مدد کر سکتے ہیں؟',
+    englishTemplate: 'Can you please help me?',
+    priority: 100,
+  },
+  {
+    id: 'thank_you_very_much_en',
+    pattern: ['THANKS', 'YOU'],
+    urduTemplate: 'آپ کا بہت شکریہ',
+    englishTemplate: 'Thank you very much.',
+    priority: 98,
+  },
+
   // === Multi-token greeting + question combos ===
   {
     id: 'greeting_how_feeling',
@@ -371,7 +529,7 @@ const STANDALONE_SENTENCES: Record<string, { urdu: string; english: string }> = 
   'Samjhna': { urdu: 'سمجھ لیں', english: 'Understand' },
   'Seekh raha hun': { urdu: 'میں سیکھ رہا ہوں', english: 'I am learning' },
   'Shirt dhona hai': { urdu: 'شرٹ دھونا ہے', english: 'Need to wash shirt' },
-  'Bemar': { urdu: 'بیمار ہے', english: 'Sick' },
+  'Bemar': { urdu: 'میں بیمار ہوں', english: 'I am ill / sick' },
   'Dur hai': { urdu: 'دور ہے', english: 'It is far' },
   'Mahsoos kar rahay': { urdu: 'محسوس کر رہے ہیں', english: 'Feeling' },
   'Yaqeen': { urdu: 'یقین کریں', english: 'Trust / Believe' },
@@ -411,6 +569,19 @@ const STANDALONE_SENTENCES: Record<string, { urdu: string; english: string }> = 
   'STOP': { urdu: 'رکیں', english: 'Stop' },
   'PLEASE': { urdu: 'برائے مہربانی', english: 'Please' },
   'THANK_YOU': { urdu: 'شکریہ', english: 'Thank you' },
+
+  // Practical Deaf Assistance Standalones
+  'ILL': { urdu: 'میں بیمار ہوں', english: 'I am ill' },
+  'SICK': { urdu: 'میں بیمار ہوں', english: 'I am sick' },
+  'NICE': { urdu: 'اچھا لگا', english: 'Nice' },
+  'MEET': { urdu: 'آپ سے ملنا ہوا', english: 'Nice to meet you' },
+  'MEDICINE': { urdu: 'مجھے دوا چاہیے', english: 'I need medicine' },
+  'Dawa': { urdu: 'مجھے دوا چاہیے', english: 'I need medicine' },
+  'BUY': { urdu: 'خریدنا ہے', english: 'I want to buy' },
+  'Kharidna': { urdu: 'خریدنا ہے', english: 'I want to buy' },
+  'HOSPITAL': { urdu: 'ہسپتال کہاں ہے؟', english: 'Where is the hospital?' },
+  'PHARMACY': { urdu: 'فارمیسی کہاں ہے؟', english: 'Where is the pharmacy?' },
+  'DOCTOR': { urdu: 'ڈاکٹر کو بلائیں', english: 'Please call a doctor' },
 };
 
 // ---------------------------------------------------------------------------

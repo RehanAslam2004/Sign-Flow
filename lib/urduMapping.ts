@@ -173,6 +173,16 @@ export const DEICTIC_AND_COMMON_WORDS_MAP: Record<string, UrduSignInfo> = {
   WATER: { char: 'پانی', name: 'Water', pronunciation: 'Water' },
   YES: { char: 'جی ہاں', name: 'Yes', pronunciation: 'Yes' },
   STOP: { char: 'رکیں', name: 'Stop', pronunciation: 'Stop' },
+  NICE: { char: 'اچھا', name: 'Nice', pronunciation: 'Nice' },
+  MEET: { char: 'ملنا', name: 'Meet', pronunciation: 'Meet' },
+  MEDICINE: { char: 'دوا', name: 'Medicine', pronunciation: 'Medicine' },
+  Dawa: { char: 'دوا', name: 'Medicine', pronunciation: 'Dawa' },
+  BUY: { char: 'خریدنا', name: 'Buy', pronunciation: 'Buy' },
+  Kharidna: { char: 'خریدنا', name: 'Buy', pronunciation: 'Kharidna' },
+  ILL: { char: 'بیمار', name: 'Ill', pronunciation: 'Ill' },
+  SICK: { char: 'بیمار', name: 'Sick', pronunciation: 'Sick' },
+  HOSPITAL: { char: 'ہسپتال', name: 'Hospital', pronunciation: 'Hospital' },
+  PHARMACY: { char: 'فارمیسی', name: 'Pharmacy', pronunciation: 'Pharmacy' },
 };
 
 /**

@@ -293,6 +293,22 @@ export function classifyHandFeatures(
         language: 'heuristic',
       };
     }
+  } else if (indexExt && middleExt && !ringExt && !pinkyExt) {
+    // Two fingers extended (V / Peace) -> MEET
+    return {
+      status: 'recognized',
+      sign: 'MEET',
+      confidence: 0.70,
+      margin: 0.22,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'MEET', confidence: 0.70 },
+        { sign: 'NICE', confidence: 0.45 },
+        { sign: 'Ap', confidence: 0.20 },
+      ],
+      language: 'heuristic',
+    };
   } else if (indexExt && middleExt && ringExt && !pinkyExt) {
     return {
       status: 'recognized',
@@ -309,6 +325,66 @@ export function classifyHandFeatures(
       language: 'heuristic',
     };
   } else {
+    // Check for pinch gesture (Pill / Medicine / Dawa)
+    const pinchDist = Math.hypot(
+      coords[4][0] - coords[8][0],
+      coords[4][1] - coords[8][1],
+      coords[4][2] - coords[8][2]
+    );
+
+    if (pinchDist < 0.38 && !middleExt && !ringExt && !pinkyExt) {
+      return {
+        status: 'recognized',
+        sign: 'MEDICINE',
+        confidence: 0.70,
+        margin: 0.22,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'MEDICINE', confidence: 0.70 },
+          { sign: 'Dawa', confidence: 0.65 },
+          { sign: 'BUY', confidence: 0.30 },
+        ],
+        language: 'heuristic',
+      };
+    }
+
+    // Check for chest contact / sick state (Bemar / ILL)
+    if (extendedCount >= 3 && coords[12][2] > 0.12) {
+      return {
+        status: 'recognized',
+        sign: 'Bemar',
+        confidence: 0.70,
+        margin: 0.22,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'Bemar', confidence: 0.70 },
+          { sign: 'ILL', confidence: 0.65 },
+          { sign: 'Mujhay', confidence: 0.40 },
+        ],
+        language: 'heuristic',
+      };
+    }
+
+    // Check for open offer / Buy gesture (flat palm facing forward/up)
+    if (extendedCount === 4 && !thumbExt && coords[8][2] < -0.10) {
+      return {
+        status: 'recognized',
+        sign: 'BUY',
+        confidence: 0.68,
+        margin: 0.20,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'BUY', confidence: 0.68 },
+          { sign: 'Kharidna', confidence: 0.62 },
+          { sign: 'MEDICINE', confidence: 0.35 },
+        ],
+        language: 'heuristic',
+      };
+    }
+
     // Ambiguous posture or transition in progress
     return {
       status: 'candidate',

@@ -180,6 +180,19 @@ const SIGN_CATEGORY_MAP: Record<string, SignCategory> = {
   'STOP': 'expression',
   'PLEASE': 'expression',
   'THANK_YOU': 'expression',
+
+  // === Practical Deaf Assistance & Health ===
+  'NICE': 'adjective',
+  'MEET': 'verb',
+  'MEDICINE': 'noun',
+  'Dawa': 'noun',
+  'BUY': 'verb',
+  'Kharidna': 'verb',
+  'ILL': 'adjective',
+  'SICK': 'adjective',
+  'HOSPITAL': 'noun',
+  'PHARMACY': 'noun',
+  'DOCTOR': 'noun',
 };
 
 // ASL single letters and digits → alphabet

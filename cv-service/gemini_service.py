@@ -56,22 +56,20 @@ class ASLInterpretationResponse(BaseModel):
     )
 
 
-ASL_SYSTEM_INSTRUCTION = """You are SignFlow's expert American Sign Language (ASL) interpreter.
-Your task is to observe a chronological sequence of timestamped video frames captured from a user's webcam and translate ASL into natural, fluent English sentences.
+ASL_SYSTEM_INSTRUCTION = """You are SignFlow's expert assistive sign language interpreter designed to empower deaf and hard-of-hearing individuals in daily conversation.
+Your task is to observe chronological video frames from a user's webcam and translate sign language and communicative gestures into natural, fluent English sentences.
 
-Linguistic and Recognition Directives:
-1. Support both continuous dynamic signing AND static or held signs/fingerspelling:
-   - Dynamic continuous signing (sentences, multi-sign phrases, compound signs).
-   - Conversational signs: "HELLO", "THANK YOU", "PLEASE", "YES", "NO", "GOOD", "HELP", "I LOVE YOU", "WATER", "NAME", "NICE TO MEET YOU".
-   - Deictic pointing: Index finger pointing directly forward at camera -> "You" / "Your"; index finger pointing toward chest/self -> "I" / "Me" / "My"; downward pointing -> "This" / "Here".
-   - Static letters, numbers, and fingerspelled words held steady in frame.
-2. Carefully evaluate:
-   - Handshapes, finger extensions, palm orientations, locations relative to body/face, and movement trajectories.
-   - Non-manual markers (facial expressions, mouth morphemes, eyebrow movements, head nods/shakes).
-   - One-handed and two-handed interactions.
-3. Formulate natural, coherent English sentences from recognized signs rather than emitting disjointed glosses.
-4. Only classify as "uncertain" if the person is clearly not signing (e.g. resting hands on desk, adjusting camera, scratching nose, completely off screen, or random non-sign motion). If the user is actively posing or signing, translate their intended sign or phrase.
-5. Provide concise observations and confidence rating adhering strictly to the response schema.
+CRITICAL DIRECTIVES:
+1. NEVER output meta-commentary, technical explanations, or grammatical remarks (e.g. NEVER say "The handshape is static and ambiguous", "Lacking trajectory", "No clear lexical context", or "A person with hands in frame").
+2. Your purpose is communication. Map the user's signing and natural communicative gestures directly into standard conversational English sentences:
+   - Greetings & Introductions: "Hello, how are you?", "Nice to meet you.", "Good morning.", "Thank you very much.", "My name is..."
+   - Medical, Health & Pharmacy: "I am ill, I want to buy medicine.", "I need medicine.", "I am sick, please help me.", "Where is the pharmacy?", "Where is the hospital?"
+   - Assistance & Needs: "Can you please help me?", "I need water, please.", "I want to eat food.", "Do you understand?", "Yes, thank you.", "No, I do not."
+   - Deictic Reference: Index finger pointing forward -> "You" / "Your"; index finger pointing to chest/self -> "I" / "Me" / "My"; downward pointing -> "This" / "Here".
+   - Conversational basics: "HELLO", "THANK YOU", "PLEASE", "YES", "NO", "GOOD", "HELP", "WATER", "STOP".
+3. Formulate complete, dignified English sentences whenever the user gestures with clear intent.
+4. Only classify as "uncertain" (with recognized_text = "") if the person has their hands dropped, resting on desk, or completely idle. If they are actively gesturing or holding a pose, translate their communicative intention.
+5. Provide a confidence rating and alternatives adhering strictly to the response schema.
 """
 
 
@@ -129,24 +127,30 @@ class GeminiASLService:
                 sequence_id=sequence_id,
             )
 
+        # Downsample window to at most 3-4 keyframes (onset, midpoint, peak/hold) for rapid cloud inference (<400ms)
+        if len(frames) > 3:
+            key_frames = [frames[0], frames[len(frames) // 2], frames[-1]]
+        else:
+            key_frames = frames
+
         # Build multimodal contents with timestamp markers
         contents = []
-        for idx, f in enumerate(frames):
+        for idx, f in enumerate(key_frames):
             rel_ms = f.timestamp_ms - start_ts
             # Add JPEG image part
             image_part = types.Part.from_bytes(
                 data=f.image_bytes,
                 mime_type="image/jpeg",
             )
-            contents.append(f"[Frame {idx + 1}/{len(frames)} at +{rel_ms}ms]")
+            contents.append(f"[Keyframe {idx + 1}/{len(key_frames)} at +{rel_ms}ms]")
             contents.append(image_part)
 
         # Context prompt
         prompt = (
-            f"Analyze these {len(frames)} chronological frames captured from t={start_ts}ms to t={end_ts}ms (duration: {end_ts - start_ts}ms). "
-            f"{'Note: The user paused or completed their thought after this sequence. ' if is_boundary_pause else ''}"
-            f"{f'Preceding conversational context: \"{previous_context}\". ' if previous_context else ''}"
-            "Translate the observed American Sign Language (ASL) — including continuous sentences, static signs, pointing, or fingerspelling — into natural English text adhering strictly to the response schema."
+            f"Analyze these keyframes captured from t={start_ts}ms to t={end_ts}ms. "
+            f"{'Note: User paused or concluded sign gesture. ' if is_boundary_pause else ''}"
+            f"{f'Previous context: \"{previous_context}\". ' if previous_context else ''}"
+            "Translate this sign language gesture or sequence directly into a fluent, dignified English sentence for deaf communication (e.g. 'Hello, how are you?', 'Nice to meet you.', 'I am ill, I want to buy medicine.', 'Can you please help me?')."
         )
         contents.append(prompt)
 

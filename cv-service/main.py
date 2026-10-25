@@ -203,72 +203,7 @@ async def websocket_predict(websocket: WebSocket):
             hands_detected = frame_data.get("hands_detected", 0)
             image_data = frame_data.get("image_data")
 
-            # --- Primary: Gemini 2.0 Continuous ASL Interpretation Pipeline ---
-            if image_data:
-                buf = temporal_buffer_manager.get_session_buffer(session_id)
-                buf.add_frame(
-                    frame_id=frame_id,
-                    timestamp_ms=timestamp,
-                    image_data=image_data,
-                    hands_detected=hands_detected,
-                    metadata={"near_boundary": frame_data.get("near_boundary", False)}
-                )
-
-                is_pause = frame_data.get("is_boundary_pause", False) or buf.check_boundary_pause(timestamp)
-                if buf.is_window_ready(min_interval_ms=1000, min_frames=4) or (is_pause and len(buf.frames) >= 4):
-                    window = buf.get_overlapping_window(min_frames=4)
-                    if window:
-                        seq_id, w_frames, start_ts, end_ts = window
-                        asl_res = await gemini_asl_service.interpret_asl_window(
-                            sequence_id=seq_id,
-                            frames=w_frames,
-                            start_ts=start_ts,
-                            end_ts=end_ts,
-                            previous_context=frame_data.get("context_sentence"),
-                            is_boundary_pause=is_pause
-                        )
-
-                        response = {
-                            "schema_version": "2.0",
-                            "session_id": session_id,
-                            "sequence_id": asl_res.sequence_id,
-                            "frame_id": frame_id,
-                            "timestamp": timestamp,
-                            "status": asl_res.status,
-                            "recognized_text": asl_res.recognized_text,
-                            "sign": asl_res.recognized_text,
-                            "confidence": 0.95 if asl_res.status == "complete" else (0.80 if asl_res.status == "partial" else 0.0),
-                            "alternatives": asl_res.alternatives,
-                            "uncertainty_reason": asl_res.uncertainty_reason,
-                            "observations": asl_res.observations,
-                            "start_timestamp_ms": asl_res.start_timestamp_ms,
-                            "end_timestamp_ms": asl_res.end_timestamp_ms,
-                            "hands_count": hands_detected,
-                            "language": "asl_continuous",
-                            "backend": "gemini",
-                            "model": gemini_asl_service.model_name
-                        }
-                        await websocket.send_json(response)
-                        continue
-
-                # Temporal frame buffered, waiting for next overlap window
-                await websocket.send_json({
-                    "schema_version": "2.0",
-                    "session_id": session_id,
-                    "frame_id": frame_id,
-                    "timestamp": timestamp,
-                    "status": "buffering",
-                    "sign": None,
-                    "confidence": 0.0,
-                    "buffered_frames": len(buf.frames),
-                    "hands_count": hands_detected,
-                    "backend": "gemini",
-                    "model": gemini_asl_service.model_name,
-                    "message": f"Buffering temporal frames ({len(buf.frames)} frames)"
-                })
-                continue
-
-            # --- Fallback: Landmark-only Frame Processing (Backward Compatibility) ---
+            # --- Check Hands Detection First ---
             if hands_detected == 0 or not frame_data.get("hands"):
                 prev_wrist_norm = None
                 response = {
@@ -288,7 +223,7 @@ async def websocket_predict(websocket: WebSocket):
                 await websocket.send_json(response)
                 continue
 
-            # Extract normalized feature vector with spatial continuity
+            # --- High-Speed Landmark Feature Extraction & Inference (<5ms) ---
             features, status_msg, meta = extract_frame_features_extended(frame_data, prev_wrist_norm)
             if features is None:
                 response = {
@@ -308,7 +243,7 @@ async def websocket_predict(websocket: WebSocket):
                 await websocket.send_json(response)
                 continue
 
-            # Update tracked wrist position for spatial continuity in next frame
+            # Update tracked wrist position for spatial continuity
             prev_wrist_norm = meta.get("wrist_pos")
 
             # Run unified inference
@@ -322,25 +257,82 @@ async def websocket_predict(websocket: WebSocket):
                 handedness=meta.get("handedness", "Right"),
             )
 
-            response = {
-                "schema_version": "1.0",
-                "session_id": session_id,
-                "frame_id": frame_id,
-                "timestamp": timestamp,
-                "status": pred["status"],
-                "sign": pred["sign"],
-                "confidence": pred["confidence"],
-                "margin": pred.get("margin", 0.0),
-                "top_candidates": pred.get("top_candidates", []),
-                "is_candidate": pred["is_candidate"],
-                "language": pred.get("language", requested_lang),
-                "rejection_reason": pred.get("rejection_reason"),
-                "hands_count": meta.get("hands_count", hands_detected),
-                "handedness": meta.get("handedness", "Right"),
-                "inference_latency_ms": pred.get("inference_latency_ms", 0.0),
-                "message": pred.get("message")
-            }
-            await websocket.send_json(response)
+            # --- Concurrent Gemini Continuous ASL Window Processing ---
+            gemini_emitted = False
+            if image_data:
+                buf = temporal_buffer_manager.get_session_buffer(session_id)
+                buf.add_frame(
+                    frame_id=frame_id,
+                    timestamp_ms=timestamp,
+                    image_data=image_data,
+                    hands_detected=hands_detected,
+                    metadata={"near_boundary": near_boundary}
+                )
+
+                is_pause = frame_data.get("is_boundary_pause", False) or buf.check_boundary_pause(timestamp)
+                if buf.is_window_ready(min_interval_ms=1000, min_frames=3) or (is_pause and len(buf.frames) >= 3):
+                    window = buf.get_overlapping_window(min_frames=3)
+                    if window:
+                        seq_id, w_frames, start_ts, end_ts = window
+                        asl_res = await gemini_asl_service.interpret_asl_window(
+                            sequence_id=seq_id,
+                            frames=w_frames,
+                            start_ts=start_ts,
+                            end_ts=end_ts,
+                            previous_context=frame_data.get("context_sentence"),
+                            is_boundary_pause=is_pause
+                        )
+
+                        # Emit Gemini sentence if it recognized communicative text
+                        if (
+                            asl_res.status in ("complete", "partial")
+                            and asl_res.recognized_text
+                            and asl_res.recognized_text.strip()
+                        ):
+                            response = {
+                                "schema_version": "2.0",
+                                "session_id": session_id,
+                                "sequence_id": asl_res.sequence_id,
+                                "frame_id": frame_id,
+                                "timestamp": timestamp,
+                                "status": asl_res.status,
+                                "recognized_text": asl_res.recognized_text,
+                                "sign": asl_res.recognized_text,
+                                "confidence": 0.95 if asl_res.status == "complete" else 0.80,
+                                "alternatives": asl_res.alternatives,
+                                "uncertainty_reason": asl_res.uncertainty_reason,
+                                "observations": asl_res.observations,
+                                "start_timestamp_ms": asl_res.start_timestamp_ms,
+                                "end_timestamp_ms": asl_res.end_timestamp_ms,
+                                "hands_count": hands_detected,
+                                "language": "asl_continuous",
+                                "backend": "gemini",
+                                "model": gemini_asl_service.model_name
+                            }
+                            await websocket.send_json(response)
+                            gemini_emitted = True
+
+            if not gemini_emitted:
+                # Emit instantaneous, high-speed landmark prediction (<5ms)
+                response = {
+                    "schema_version": "1.0",
+                    "session_id": session_id,
+                    "frame_id": frame_id,
+                    "timestamp": timestamp,
+                    "status": pred["status"],
+                    "sign": pred["sign"],
+                    "confidence": pred["confidence"],
+                    "margin": pred.get("margin", 0.0),
+                    "top_candidates": pred.get("top_candidates", []),
+                    "is_candidate": pred["is_candidate"],
+                    "language": pred.get("language", requested_lang),
+                    "rejection_reason": pred.get("rejection_reason"),
+                    "hands_count": meta.get("hands_count", hands_detected),
+                    "handedness": meta.get("handedness", "Right"),
+                    "inference_latency_ms": pred.get("inference_latency_ms", 0.0),
+                    "message": pred.get("message")
+                }
+                await websocket.send_json(response)
 
     except WebSocketDisconnect:
         temporal_buffer_manager.remove_session(default_session_id)

@@ -421,17 +421,23 @@ export default function SignFlowHome() {
             context_sentence: lastConfirmedSentenceRef.current || undefined,
           };
 
+          // Run instant in-browser edge preview for zero-latency UI responsiveness
+          if (hasHands) {
+            const edgePred = runClientInference(payload);
+            if (edgePred.status === 'recognized' && edgePred.sign && edgePred.sign !== 'RECOGNIZING') {
+              setCandidateSign(edgePred.sign);
+              setCandidateConfidence(edgePred.confidence);
+              if (edgePred.margin !== undefined) setLatestMargin(edgePred.margin);
+              if (edgePred.top_candidates) setLatestTopCandidates(edgePred.top_candidates);
+              if (edgePred.handedness) setLatestHandedness(edgePred.handedness);
+              if (edgePred.hands_count !== undefined) setLatestHandsCount(edgePred.hands_count);
+              stateMachineRef.current?.processPrediction(edgePred);
+              setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
+            }
+          }
+
           const sent = wsClient.sendFrame(payload);
           if (!sent) {
-            // Fallback client inference if websocket disconnected
-            const localPrediction = runClientInference(payload);
-            if (localPrediction.margin !== undefined) setLatestMargin(localPrediction.margin);
-            if (localPrediction.top_candidates) setLatestTopCandidates(localPrediction.top_candidates);
-            if (localPrediction.handedness) setLatestHandedness(localPrediction.handedness);
-            if (localPrediction.hands_count !== undefined) setLatestHandsCount(localPrediction.hands_count);
-
-            stateMachineRef.current?.processPrediction(localPrediction);
-            setDiagnosticsSnapshot(stateMachineRef.current?.getDiagnosticsSnapshot() || null);
             setServiceStatus((prev) => (prev === 'connected' ? prev : 'edge_active'));
           }
         }
