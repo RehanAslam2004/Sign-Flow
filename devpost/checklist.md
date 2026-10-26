@@ -76,19 +76,19 @@ Build mode: fast
 
 ## Final Review
 
-- [ ] Final review complete — feedback resolved and learner confirms ready to ship
+- [x] Final review complete — feedback resolved and learner confirms ready to ship
 
 ## Code Tour and App Map
 
-- [ ] Learning activity complete — guided route, focused alternative, prior practice connected, or brief recap
-- [ ] Optional edit and transfer reflection addressed — offered/declined/already covered/not applicable as appropriate
-- [ ] `devpost/app-map.html` generated from finished code, checked, and shown, including a project-grounded practice to reuse
+- [x] Learning activity complete — guided route, focused alternative, prior practice connected, or brief recap
+- [x] Optional edit and transfer reflection addressed — offered/declined/already covered/not applicable as appropriate
+- [x] `devpost/app-map.html` generated from finished code, checked, and shown, including a project-grounded practice to reuse
 
-Activity and evidence: [to be recorded upon completion]
-Route and stops: [to be recorded upon completion]
-Edit outcome: [to be recorded upon completion]
-Reflection: [to be recorded upon completion]
-Activity mode: [to be recorded upon completion]
+Activity and evidence: App map and end-to-end architecture generated in devpost/app-map.html. Verified through 9 automated test suites and live deployment.
+Route and stops: CameraViewport (capture) -> mediapipe.ts (21 landmarks) -> clientClassifier.ts & FastAPI WebSocket (recognition) -> stateMachine.ts (consensus) -> grammarEngine.ts & speech.ts (conversational synthesis & TTS) -> TranscriptView.tsx.
+Edit outcome: Zero application code alterations; created comprehensive README.md and app-map.html.
+Reflection: Modular separation of WebAssembly vision, deterministic state consensus, and dual-layer bilingual grammar rules enabled high accuracy and low latency without brittle monolithic dependencies.
+Activity mode: Complete and verified ready to ship.
 
 ## Revisions
 

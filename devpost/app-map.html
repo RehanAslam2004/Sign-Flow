@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SignFlow — App Map & Architecture Tour</title>
+  <style>
+    :root {
+      --primary: #068D9D;
+      --primary-hover: #05707d;
+      --secondary: #53599A;
+      --bg: #F8FAFC;
+      --card-bg: #FFFFFF;
+      --text-main: #1E293B;
+      --text-muted: #64748B;
+      --border: #E2E8F0;
+      --accent-subtle: #E6F4F6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      line-height: 1.6;
+      padding: 32px 16px;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    header {
+      background: var(--card-bg);
+      padding: 32px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .badge {
+      display: inline-block;
+      background: var(--accent-subtle);
+      color: var(--primary);
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 8px;
+    }
+    p.lead {
+      font-size: 16px;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .card {
+      background: var(--card-bg);
+      padding: 24px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .card h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    .card li {
+      font-size: 14px;
+      color: var(--text-main);
+      padding: 6px 0;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .card li:last-child {
+      border-bottom: none;
+    }
+    .card code {
+      font-family: monospace;
+      font-size: 12px;
+      background: #f1f5f9;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: var(--secondary);
+    }
+    .flow-box {
+      background: var(--card-bg);
+      padding: 24px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+    .flow-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      font-size: 13px;
+    }
+    .step-body h3 {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .step-body p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">App Map & Architecture Tour</span>
+      <h1>SignFlow Architecture Map</h1>
+      <p class="lead">Interactive code map and data flow overview for the SignFlow real-time assistive translation proof of concept.</p>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <h2>🎥 Video & Landmarks</h2>
+        <ul>
+          <li><code>components/CameraViewport.tsx</code> — Video stream and WebGL canvas overlay.</li>
+          <li><code>lib/mediapipe.ts</code> — MediaPipe Tasks Vision WebAssembly loader and 21-landmark extractor.</li>
+          <li><code>components/GhostHandGuide.tsx</code> — AR ghost-hand demonstration guide.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>🧠 Recognition & Intelligence</h2>
+        <ul>
+          <li><code>lib/clientClassifier.ts</code> — Zero-latency in-browser geometric edge classifier.</li>
+          <li><code>lib/grammarEngine.ts</code> — Conversational sentence rules (English & Urdu).</li>
+          <li><code>lib/stateMachine.ts</code> — Time-decayed consensus, majority voting & stability.</li>
+          <li><code>cv-service/main.py</code> — Python FastAPI WebSocket backend service.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2>🗣️ Output & Voice</h2>
+        <ul>
+          <li><code>lib/speech.ts</code> — Web Speech API SpeechSynthesis wrapper with session protection.</li>
+          <li><code>components/TranscriptView.tsx</code> — Dual-layer conversation transcript with audio replay.</li>
+          <li><code>lib/bilingualFormatter.ts</code> — Formatter for dual-language display & phonetic speech.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="flow-box">
+      <h2 style="font-size: 18px; margin-bottom: 16px; color: var(--primary);">End-to-End Recognition & Speech Loop</h2>
+      <div class="flow-step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Camera Capture & Hand Landmarks</h3>
+          <p>Browser captures webcam feed. MediaPipe HandLandmarker extracts 21 3D coordinate landmarks per hand in local memory.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Dual-Track Recognition Engine</h3>
+          <p>Local geometric heuristics evaluate gestures in real time (<5ms). Landmark packets stream over WebSocket to FastAPI for multi-class classification.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Temporal Consensus & Grammar Assembly</h3>
+          <p>State machine stabilizes candidates across 250–380ms windows, resolving synonym clusters and composing natural conversational sentences.</p>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Transcript Commit & Speech Output</h3>
+          <p>Boundary pause or Finish & Speak commits the utterance to the transcript, triggers browser SpeechSynthesis, and presents contextual suggested replies.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
