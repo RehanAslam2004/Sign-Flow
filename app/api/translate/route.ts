@@ -55,18 +55,50 @@ function synthesizeGrammarLocally(tokens: string[]): string {
   if (tokenSet.has('PLAY') && tokenSet.has('PLEASE')) {
     return 'Can we play, please?';
   }
+  if (tokenSet.has('HURT') && tokenSet.has('HELP')) {
+    return 'It hurts, please help me.';
+  }
+  if (tokenSet.has('SORRY') && tokenSet.has('PLEASE')) {
+    return 'I am really sorry, please forgive me.';
+  }
+  if (tokenSet.has('WANT') && tokenSet.has('DRINK')) {
+    return 'I want something to drink.';
+  }
+  if (tokenSet.has('WANT') && tokenSet.has('EAT')) {
+    return 'I want something to eat.';
+  }
+  if (tokenSet.has('FIND') && tokenSet.has('HELP')) {
+    return 'Please help me find it.';
+  }
+  if (tokenSet.has('ALL DONE') && tokenSet.has('THANK YOU')) {
+    return 'All done, thank you very much.';
+  }
+  if (tokenSet.has('OPEN') && tokenSet.has('PLEASE')) {
+    return 'Please open this.';
+  }
+  if (tokenSet.has('SIT') && tokenSet.has('PLEASE')) {
+    return 'Please have a seat.';
+  }
 
-  // Single-token dictionary
+  // Single-token dictionary for all 20 ASL chart signs + HELLO
   const singleTokenMap: Record<string, string> = {
     'YES': 'Yes, I agree.',
     'NO': 'No, I disagree.',
     'PLEASE': 'Please.',
     'THANK YOU': 'Thank you very much.',
+    'SORRY': 'I am really sorry.',
     'HELP': 'I need help, please.',
     'MORE': 'I want more.',
+    'ALL DONE': 'All finished, all done.',
+    'FIND': 'Can you help me find it?',
+    'WANT': 'I want this.',
+    'OPEN': 'Please open this.',
+    'SIT': 'Please sit down.',
+    'SLEEP': 'I am tired, I need to sleep.',
+    'PLAY': 'I want to play.',
     'EAT': 'I am hungry, I want to eat.',
     'DRINK': 'I am thirsty, I want a drink.',
-    'PLAY': 'I want to play.',
+    'HURT': 'It hurts, I am in pain.',
     'RESTROOM': 'Where is the restroom?',
     'STOP': 'Please stop.',
     'GO': 'Let us go.',

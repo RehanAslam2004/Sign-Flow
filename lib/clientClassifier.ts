@@ -245,17 +245,27 @@ export function classifyHandFeatures(
   const normCross = Math.hypot(cross[0], cross[1], cross[2]) || 1.0;
   const palmNormal = [cross[0] / normCross, cross[1] / normCross, cross[2] / normCross];
 
+  // Index finger direction vector
+  const vIndex = [indexTip[0] - indexMcp[0], indexTip[1] - indexMcp[1], indexTip[2] - indexMcp[2]];
+  const normVIndex = Math.hypot(vIndex[0], vIndex[1], vIndex[2]) || 1.0;
+  const vIndexNorm = [vIndex[0] / normVIndex, vIndex[1] / normVIndex, vIndex[2] / normVIndex];
+
+  // Adjacent finger spacings
+  const dIndexMiddle = dist(indexTip, middleTip);
+  const dMiddleRing = dist(middleTip, ringTip);
+  const dRingPinky = dist(ringTip, pinkyTip);
+
   // 1. PLAY: "Y" handshape (Thumb and Pinky extended, middle 3 curled)
-  if (thumbExt && pinkyExt && !middleExt && !ringExt && indexCurl < 1.20) {
+  if (thumbExt && pinkyExt && !middleExt && !ringExt && indexCurl < 1.25) {
     return {
       status: 'recognized',
       sign: 'PLAY',
-      confidence: 0.90,
+      confidence: 0.94,
       margin: 0.40,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'PLAY', confidence: 0.90 },
+        { sign: 'PLAY', confidence: 0.94 },
         { sign: 'YES', confidence: 0.40 },
       ],
       gesture_type: 'y_handshape',
@@ -263,185 +273,42 @@ export function classifyHandFeatures(
     };
   }
 
-  // 2. NO: 3-finger pinch (Index + Middle extended with tips touching Thumb tip)
-  if (
-    curledCount < 4 &&
-    dThumbIndex < 0.40 &&
-    dThumbMiddle < 0.45 &&
-    ringCurl < 1.25 &&
-    pinkyCurl < 1.25 &&
-    !ringExt &&
-    !pinkyExt
-  ) {
+  // 2. FIND: "F" handshape (Thumb and Index fingertips touching to pick up, other 3 extended)
+  if (dThumbIndex < 0.38 && middleExt && ringExt && pinkyExt) {
     return {
       status: 'recognized',
-      sign: 'NO',
-      confidence: 0.88,
-      margin: 0.35,
+      sign: 'FIND',
+      confidence: 0.92,
+      margin: 0.36,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'NO', confidence: 0.88 },
-        { sign: 'MORE', confidence: 0.45 },
+        { sign: 'FIND', confidence: 0.92 },
+        { sign: 'F', confidence: 0.70 },
       ],
-      gesture_type: 'three_finger_pinch',
+      gesture_type: 'f_pinch_handshape',
       language: 'asl',
     };
   }
 
-  // 3. HELP: Thumbs up upright, all 4 fingers curled
-  const thumbPointingUp = (thumbTip[1] - thumbMcp[1]) < -0.15 * palmScale;
-  if (curledCount === 4 && thumbExt && thumbPointingUp) {
-    return {
-      status: 'recognized',
-      sign: 'HELP',
-      confidence: 0.88,
-      margin: 0.32,
-      is_candidate: true,
-      message: null,
-      top_candidates: [
-        { sign: 'HELP', confidence: 0.88 },
-        { sign: 'YES', confidence: 0.50 },
-      ],
-      gesture_type: 'thumb_up',
-      language: 'asl',
-    };
-  }
-
-  // 4. YES: Closed fist (0 fingers extended, thumb folded)
-  if (curledCount === 4 && !thumbExt) {
-    return {
-      status: 'recognized',
-      sign: 'YES',
-      confidence: 0.86,
-      margin: 0.30,
-      is_candidate: true,
-      message: null,
-      top_candidates: [
-        { sign: 'YES', confidence: 0.86 },
-        { sign: 'RESTROOM', confidence: 0.42 },
-      ],
-      gesture_type: 'closed_fist',
-      language: 'asl',
-    };
-  }
-
-  // 5. Index Finger Pointing: Forward -> YOU / GO
-  const vIndex = [indexTip[0] - indexMcp[0], indexTip[1] - indexMcp[1], indexTip[2] - indexMcp[2]];
-  const normVIndex = Math.hypot(vIndex[0], vIndex[1], vIndex[2]) || 1.0;
-  const vIndexNorm = [vIndex[0] / normVIndex, vIndex[1] / normVIndex, vIndex[2] / normVIndex];
-
-  if (indexExt && !middleExt && !ringExt && !pinkyExt) {
-    if (vIndexNorm[2] < -0.20 || (Math.abs(vIndexNorm[0]) > 0.6 && vIndexNorm[1] < 0.2)) {
-      return {
-        status: 'recognized',
-        sign: 'YOU',
-        confidence: 0.88,
-        margin: 0.32,
-        is_candidate: true,
-        message: null,
-        top_candidates: [
-          { sign: 'YOU', confidence: 0.88 },
-          { sign: 'GO', confidence: 0.65 },
-        ],
-        gesture_type: 'index_pointing_forward',
-        language: 'asl',
-      };
-    } else if (vIndexNorm[1] < -0.5) {
-      return {
-        status: 'recognized',
-        sign: 'HELP',
-        confidence: 0.82,
-        margin: 0.25,
-        is_candidate: true,
-        message: null,
-        top_candidates: [
-          { sign: 'HELP', confidence: 0.82 },
-          { sign: 'YOU', confidence: 0.40 },
-        ],
-        gesture_type: 'index_pointing_up',
-        language: 'asl',
-      };
-    }
-  }
-
-  // 6. RESTROOM: "T" handshape (Thumb between index & middle knuckles)
-  if (
-    curledCount === 4 &&
-    !indexExt &&
-    !thumbExt &&
-    Math.abs(thumbTip[0] - (indexPip[0] + middlePip[0]) / 2.0) < 0.25 * palmScale &&
-    thumbTip[1] < indexPip[1] + 0.1 * palmScale
-  ) {
-    return {
-      status: 'recognized',
-      sign: 'RESTROOM',
-      confidence: 0.85,
-      margin: 0.30,
-      is_candidate: true,
-      message: null,
-      top_candidates: [
-        { sign: 'RESTROOM', confidence: 0.85 },
-        { sign: 'YES', confidence: 0.45 },
-      ],
-      gesture_type: 't_handshape',
-      language: 'asl',
-    };
-  }
-
-  // 6b. "O" and "F" Handshapes (Thumb and index form a circle)
-  if (dThumbIndex < 0.38) {
-    if (middleExt && ringExt && pinkyExt) {
-      return {
-        status: 'recognized',
-        sign: 'F',
-        confidence: 0.88,
-        margin: 0.32,
-        is_candidate: true,
-        message: null,
-        top_candidates: [
-          { sign: 'F', confidence: 0.88 },
-          { sign: 'O', confidence: 0.40 },
-        ],
-        gesture_type: 'f_ok_handshape',
-        language: 'asl',
-      };
-    } else if (!middleExt && !ringExt && !pinkyExt) {
-      return {
-        status: 'recognized',
-        sign: 'O',
-        confidence: 0.88,
-        margin: 0.32,
-        is_candidate: true,
-        message: null,
-        top_candidates: [
-          { sign: 'O', confidence: 0.88 },
-          { sign: 'F', confidence: 0.45 },
-        ],
-        gesture_type: 'o_handshape',
-        language: 'asl',
-      };
-    }
-  }
-
-  // 7. MORE / EAT: 5 fingertips cluster (all 5 tips meet together)
+  // 3. MORE / EAT: 5 fingertips cluster (all 5 tips meet together in a tapered point)
   const allTipsTouchThumb =
-    dist(thumbTip, indexTip) < 0.42 &&
-    dist(thumbTip, middleTip) < 0.45 &&
-    dist(thumbTip, ringTip) < 0.45 &&
-    dist(thumbTip, pinkyTip) < 0.48;
+    dist(thumbTip, indexTip) < 0.38 &&
+    dist(thumbTip, middleTip) < 0.40 &&
+    dist(thumbTip, ringTip) < 0.38 &&
+    dist(thumbTip, pinkyTip) < 0.38;
 
-  if (allTipsTouchThumb && curledCount < 4) {
+  if (allTipsTouchThumb && extendedCount < 4) {
     if (avgY < 0.40) {
       return {
         status: 'recognized',
         sign: 'EAT',
-        confidence: 0.86,
-        margin: 0.30,
+        confidence: 0.92,
+        margin: 0.36,
         is_candidate: true,
         message: null,
         top_candidates: [
-          { sign: 'EAT', confidence: 0.86 },
+          { sign: 'EAT', confidence: 0.92 },
           { sign: 'MORE', confidence: 0.55 },
         ],
         gesture_type: 'cluster_at_mouth',
@@ -451,12 +318,12 @@ export function classifyHandFeatures(
       return {
         status: 'recognized',
         sign: 'MORE',
-        confidence: 0.87,
-        margin: 0.30,
+        confidence: 0.92,
+        margin: 0.36,
         is_candidate: true,
         message: null,
         top_candidates: [
-          { sign: 'MORE', confidence: 0.87 },
+          { sign: 'MORE', confidence: 0.92 },
           { sign: 'EAT', confidence: 0.55 },
         ],
         gesture_type: 'fingertip_cluster',
@@ -465,29 +332,58 @@ export function classifyHandFeatures(
     }
   }
 
-  // 8. DRINK: "C" cup handshape
+  // 4. NO: 3-finger snapping beak (Index + Middle extended with tips touching Thumb tip, ring & pinky curled)
+  const indexOrMiddleExt = (indexTip[1] < indexPip[1] || middleTip[1] < middlePip[1]) || (indexCurl >= 1.18 || middleCurl >= 1.18);
+  if (
+    indexOrMiddleExt &&
+    dThumbIndex < 0.45 &&
+    dThumbMiddle < 0.48 &&
+    dist(thumbTip, ringTip) > 0.35 &&
+    dist(thumbTip, pinkyTip) > 0.35 &&
+    ringCurl < 1.25 &&
+    pinkyCurl < 1.25 &&
+    !ringExt &&
+    !pinkyExt
+  ) {
+    return {
+      status: 'recognized',
+      sign: 'NO',
+      confidence: 0.92,
+      margin: 0.36,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'NO', confidence: 0.92 },
+        { sign: 'MORE', confidence: 0.45 },
+      ],
+      gesture_type: 'three_finger_pinch',
+      language: 'asl',
+    };
+  }
+
+  // 5. DRINK: "C" cup handshape tilted near mouth
   const dCGap = dist(thumbTip, indexTip);
   const isCShape =
     dCGap > 0.35 &&
-    dCGap < 0.75 &&
-    indexCurl > 1.10 &&
-    indexCurl < 1.50 &&
-    middleCurl > 1.10 &&
-    middleCurl < 1.50 &&
-    ringCurl > 1.10 &&
-    ringCurl < 1.50 &&
+    dCGap < 0.80 &&
+    indexCurl > 1.05 &&
+    indexCurl < 1.55 &&
+    middleCurl > 1.05 &&
+    middleCurl < 1.55 &&
+    ringCurl > 1.05 &&
+    ringCurl < 1.55 &&
     !indexExt;
 
   if (isCShape && avgY < 0.60) {
     return {
       status: 'recognized',
       sign: 'DRINK',
-      confidence: 0.84,
-      margin: 0.28,
+      confidence: 0.90,
+      margin: 0.32,
       is_candidate: true,
       message: null,
       top_candidates: [
-        { sign: 'DRINK', confidence: 0.84 },
+        { sign: 'DRINK', confidence: 0.90 },
         { sign: 'MORE', confidence: 0.40 },
       ],
       gesture_type: 'c_cup_handshape',
@@ -495,54 +391,313 @@ export function classifyHandFeatures(
     };
   }
 
-  // 9. STOP / PLEASE / THANK YOU: Open flat hand (4 fingers extended)
-  if (extendedCount === 4) {
-    if (palmNormal[2] > 0.40 && avgY > 0.40) {
+  // 6. RESTROOM: "T" handshape (Thumb tucked between index & middle knuckles)
+  if (
+    curledCount === 4 &&
+    !indexExt &&
+    !thumbExt &&
+    Math.abs(thumbTip[0] - (indexPip[0] + middlePip[0]) / 2.0) < 0.30 * palmScale &&
+    thumbTip[1] < indexPip[1] + 0.15 * palmScale
+  ) {
+    return {
+      status: 'recognized',
+      sign: 'RESTROOM',
+      confidence: 0.90,
+      margin: 0.35,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'RESTROOM', confidence: 0.90 },
+        { sign: 'YES', confidence: 0.45 },
+      ],
+      gesture_type: 't_handshape',
+      language: 'asl',
+    };
+  }
+
+  // 7. HELP: Thumbs up upright, all 4 fingers curled
+  const thumbPointingUp = (thumbTip[1] - thumbMcp[1]) < -0.12 * palmScale || (thumbTip[1] - wrist[1]) < -0.35 * palmScale;
+  if (curledCount >= 3 && thumbExt && thumbPointingUp && dThumbIndex > 0.18) {
+    return {
+      status: 'recognized',
+      sign: 'HELP',
+      confidence: 0.94,
+      margin: 0.38,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'HELP', confidence: 0.94 },
+        { sign: 'YES', confidence: 0.50 },
+      ],
+      gesture_type: 'thumb_up',
+      language: 'asl',
+    };
+  }
+
+  // 8. SORRY: Closed fist held against chest
+  if (curledCount === 4 && dist(thumbTip, indexMcp) < 0.50 && avgY >= 0.42 && avgY <= 0.72) {
+    return {
+      status: 'recognized',
+      sign: 'SORRY',
+      confidence: 0.88,
+      margin: 0.30,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'SORRY', confidence: 0.88 },
+        { sign: 'YES', confidence: 0.65 },
+      ],
+      gesture_type: 'fist_on_chest',
+      language: 'asl',
+    };
+  }
+
+  // 9. YES: Closed fist (all 4 fingers curled, thumb folded across fingers)
+  if (curledCount === 4 && !thumbExt) {
+    return {
+      status: 'recognized',
+      sign: 'YES',
+      confidence: 0.90,
+      margin: 0.35,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'YES', confidence: 0.90 },
+        { sign: 'RESTROOM', confidence: 0.42 },
+      ],
+      gesture_type: 'closed_fist',
+      language: 'asl',
+    };
+  }
+
+  // 10. WANT: Claw hands (all 5 fingers curved/clawed, palm facing upward/inward)
+  const isClawed =
+    indexCurl > 1.10 && indexCurl < 1.65 &&
+    middleCurl > 1.10 && middleCurl < 1.65 &&
+    ringCurl > 1.10 && ringCurl < 1.65 &&
+    pinkyCurl > 1.10 && pinkyCurl < 1.65;
+  if (isClawed && (palmNormal[1] < -0.15 || palmNormal[2] < -0.15)) {
+    return {
+      status: 'recognized',
+      sign: 'WANT',
+      confidence: 0.88,
+      margin: 0.30,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'WANT', confidence: 0.88 },
+        { sign: 'EAT', confidence: 0.40 },
+      ],
+      gesture_type: 'claw_hand_inward',
+      language: 'asl',
+    };
+  }
+
+  // 11. SIT: Index and Middle extended but bent/hooked downward at knuckles
+  if (
+    vIndexNorm[1] > 0.40 &&
+    indexTip[1] > indexPip[1] &&
+    middleTip[1] > middlePip[1] &&
+    ringCurl < 1.25 &&
+    pinkyCurl < 1.25
+  ) {
+    return {
+      status: 'recognized',
+      sign: 'SIT',
+      confidence: 0.88,
+      margin: 0.30,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'SIT', confidence: 0.88 },
+        { sign: 'GO', confidence: 0.40 },
+      ],
+      gesture_type: 'hooked_fingers_down',
+      language: 'asl',
+    };
+  }
+
+  // 12. HURT: Index finger pointing horizontally across body
+  if (indexExt && !middleExt && !ringExt && !pinkyExt && Math.abs(vIndexNorm[0]) > 0.68) {
+    return {
+      status: 'recognized',
+      sign: 'HURT',
+      confidence: 0.90,
+      margin: 0.32,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'HURT', confidence: 0.90 },
+        { sign: 'HELP', confidence: 0.45 },
+      ],
+      gesture_type: 'index_pointing_horizontal',
+      language: 'asl',
+    };
+  }
+
+  // 13. GO / YOU: Index finger pointing forward toward camera
+  if (indexExt && !middleExt && !ringExt && !pinkyExt) {
+    if (vIndexNorm[2] < -0.18 || (Math.abs(vIndexNorm[0]) > 0.55 && vIndexNorm[1] < 0.2)) {
       return {
         status: 'recognized',
-        sign: 'PLEASE',
-        confidence: 0.84,
-        margin: 0.26,
+        sign: 'GO',
+        confidence: 0.92,
+        margin: 0.35,
         is_candidate: true,
         message: null,
         top_candidates: [
-          { sign: 'PLEASE', confidence: 0.84 },
-          { sign: 'THANK YOU', confidence: 0.50 },
+          { sign: 'GO', confidence: 0.92 },
+          { sign: 'YOU', confidence: 0.85 },
         ],
-        gesture_type: 'flat_hand_chest',
+        gesture_type: 'index_pointing_forward',
         language: 'asl',
       };
-    } else if (avgY < 0.42) {
+    } else if (vIndexNorm[1] < -0.5) {
       return {
         status: 'recognized',
-        sign: 'THANK YOU',
-        confidence: 0.85,
+        sign: 'HELP',
+        confidence: 0.84,
         margin: 0.28,
         is_candidate: true,
         message: null,
         top_candidates: [
-          { sign: 'THANK YOU', confidence: 0.85 },
+          { sign: 'HELP', confidence: 0.84 },
+          { sign: 'GO', confidence: 0.40 },
+        ],
+        gesture_type: 'index_pointing_up',
+        language: 'asl',
+      };
+    }
+  }
+
+  // 14. SLEEP: Hand at face level closing downward
+  if (avgY < 0.36 && palmNormal[2] < 0.10 && (extendedCount >= 3 || allTipsTouchThumb)) {
+    return {
+      status: 'recognized',
+      sign: 'SLEEP',
+      confidence: 0.88,
+      margin: 0.30,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'SLEEP', confidence: 0.88 },
+        { sign: 'THANK YOU', confidence: 0.45 },
+      ],
+      gesture_type: 'hand_closing_at_face',
+      language: 'asl',
+    };
+  }
+
+  // 15. OPEN HAND FAMILY: HELLO, STOP, THANK YOU, PLEASE, OPEN, ALL DONE
+  if (extendedCount >= 4) {
+    const fingersSpread = dIndexMiddle >= 0.22;
+    const fingersTogether = dIndexMiddle < 0.32 && dMiddleRing < 0.32;
+
+    // A. HELLO: Open palm facing camera with fingers spread, held upright near face/shoulder
+    if (fingersSpread && palmNormal[2] > -0.25 && avgY < 0.65) {
+      return {
+        status: 'recognized',
+        sign: 'HELLO',
+        confidence: 0.95,
+        margin: 0.40,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'HELLO', confidence: 0.95 },
           { sign: 'STOP', confidence: 0.45 },
+        ],
+        gesture_type: 'open_palm_greeting',
+        language: 'asl',
+      };
+    }
+
+    // B. THANK YOU: Flat hand at chin/mouth height
+    if (avgY < 0.38) {
+      return {
+        status: 'recognized',
+        sign: 'THANK YOU',
+        confidence: 0.92,
+        margin: 0.35,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'THANK YOU', confidence: 0.92 },
+          { sign: 'HELLO', confidence: 0.50 },
         ],
         gesture_type: 'flat_hand_chin',
         language: 'asl',
       };
-    } else {
+    }
+
+    // C. PLEASE: Flat hand placed over chest, palm facing inward
+    if (avgY >= 0.40 && avgY <= 0.72 && palmNormal[2] < 0.15) {
       return {
         status: 'recognized',
-        sign: 'STOP',
-        confidence: 0.86,
-        margin: 0.30,
+        sign: 'PLEASE',
+        confidence: 0.90,
+        margin: 0.32,
         is_candidate: true,
         message: null,
         top_candidates: [
-          { sign: 'STOP', confidence: 0.86 },
-          { sign: 'THANK YOU', confidence: 0.50 },
+          { sign: 'PLEASE', confidence: 0.90 },
+          { sign: 'STOP', confidence: 0.50 },
         ],
-        gesture_type: 'flat_hand_vertical',
+        gesture_type: 'flat_hand_chest',
         language: 'asl',
       };
     }
+
+    // D. STOP: Flat vertical palm facing directly forward, fingers together
+    if (fingersTogether && palmNormal[2] > 0.15) {
+      return {
+        status: 'recognized',
+        sign: 'STOP',
+        confidence: 0.94,
+        margin: 0.38,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'STOP', confidence: 0.94 },
+          { sign: 'HELLO', confidence: 0.45 },
+        ],
+        gesture_type: 'flat_hand_vertical_stop',
+        language: 'asl',
+      };
+    }
+
+    // E. OPEN: Flat hand held vertically with palm angled laterally (doors opening)
+    if (Math.abs(palmNormal[0]) > 0.35 && avgY >= 0.35 && avgY <= 0.75) {
+      return {
+        status: 'recognized',
+        sign: 'OPEN',
+        confidence: 0.90,
+        margin: 0.35,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'OPEN', confidence: 0.90 },
+          { sign: 'STOP', confidence: 0.45 },
+        ],
+        gesture_type: 'flat_hand_open_doors',
+        language: 'asl',
+      };
+    }
+
+    // F. ALL DONE: Open hand spread wide twisting
+    return {
+      status: 'recognized',
+      sign: 'ALL DONE',
+      confidence: 0.88,
+      margin: 0.30,
+      is_candidate: true,
+      message: null,
+      top_candidates: [
+        { sign: 'ALL DONE', confidence: 0.88 },
+        { sign: 'HELLO', confidence: 0.45 },
+      ],
+      gesture_type: 'open_hands_spread',
+      language: 'asl',
+    };
   }
 
   return {
@@ -559,6 +714,192 @@ export function classifyHandFeatures(
     ],
     language: 'asl',
   };
+}
+
+/**
+ * Evaluates two-hand coordinated ASL/PSL gestures matching common conversational signs:
+ * - HURT: Both index fingers pointing towards each other horizontally
+ * - HELP: Thumbs up resting on or above open flat palm
+ * - MORE: Both hands with clustered fingertips touching / tapping
+ * - OPEN: Both hands flat open side by side separating like doors
+ * - STOP: One hand vertical chopping onto other flat horizontal palm
+ * - SIT: One hand hooked fingers over other hand's flat fingers
+ * - PLAY: Both hands showing "Y" handshapes
+ * - ALL DONE: Both hands open flat with fingers spread wide
+ */
+export function classifyTwoHandFeatures(
+  hands: DetectedHand[],
+  imageWidth: number = 1280,
+  imageHeight: number = 720
+): ClientPredictionResult | null {
+  if (!hands || hands.length < 2) return null;
+  const h1 = hands[0];
+  const h2 = hands[1];
+  if (!h1.landmarks || h1.landmarks.length !== 21 || !h2.landmarks || h2.landmarks.length !== 21) {
+    return null;
+  }
+
+  try {
+    const norm1 = normalizeClientLandmarks(h1.landmarks, imageWidth, imageHeight, h1.handedness);
+    const norm2 = normalizeClientLandmarks(h2.landmarks, imageWidth, imageHeight, h2.handedness);
+
+    const res1 = classifyHandFeatures(norm1, h1.landmarks, h1.handedness);
+    const res2 = classifyHandFeatures(norm2, h2.landmarks, h2.handedness);
+
+    const w1 = h1.landmarks[0];
+    const w2 = h2.landmarks[0];
+    const distWrists = Math.hypot(w1.x - w2.x, w1.y - w2.y);
+
+    // 1. HURT: Both hands have index fingers pointing towards each other horizontally
+    const tip1 = h1.landmarks[8];
+    const mcp1 = h1.landmarks[5];
+    const tip2 = h2.landmarks[8];
+    const mcp2 = h2.landmarks[5];
+    const isIdx1 = Math.hypot(tip1.x - mcp1.x, tip1.y - mcp1.y) > 0.08;
+    const isIdx2 = Math.hypot(tip2.x - mcp2.x, tip2.y - mcp2.y) > 0.08;
+    const isHorizontal1 = Math.abs(tip1.x - mcp1.x) > Math.abs(tip1.y - mcp1.y);
+    const isHorizontal2 = Math.abs(tip2.x - mcp2.x) > Math.abs(tip2.y - mcp2.y);
+
+    if (isIdx1 && isIdx2 && isHorizontal1 && isHorizontal2 && distWrists < 0.65) {
+      return {
+        status: 'recognized',
+        sign: 'HURT',
+        confidence: 0.96,
+        margin: 0.42,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'HURT', confidence: 0.96 },
+          { sign: 'HELP', confidence: 0.40 },
+        ],
+        gesture_type: 'two_hands_hurt_pointing',
+        language: 'asl',
+      };
+    }
+
+    // 2. HELP: One hand is thumbs-up upright, other hand is flat open palm beneath it
+    const isThumbUp1 = res1.sign === 'HELP' || res1.gesture_type === 'thumb_up';
+    const isThumbUp2 = res2.sign === 'HELP' || res2.gesture_type === 'thumb_up';
+    const isOpen1 = ['STOP', 'PLEASE', 'HELLO', 'ALL DONE', 'OPEN'].includes(res1.sign || '');
+    const isOpen2 = ['STOP', 'PLEASE', 'HELLO', 'ALL DONE', 'OPEN'].includes(res2.sign || '');
+
+    if ((isThumbUp1 && isOpen2) || (isThumbUp2 && isOpen1)) {
+      return {
+        status: 'recognized',
+        sign: 'HELP',
+        confidence: 0.97,
+        margin: 0.45,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'HELP', confidence: 0.97 },
+          { sign: 'YES', confidence: 0.40 },
+        ],
+        gesture_type: 'two_hands_help_support',
+        language: 'asl',
+      };
+    }
+
+    // 3. MORE: Both hands have clustered fingertips (flattened-O) touching
+    if ((res1.sign === 'MORE' || res1.sign === 'EAT') && (res2.sign === 'MORE' || res2.sign === 'EAT')) {
+      return {
+        status: 'recognized',
+        sign: 'MORE',
+        confidence: 0.96,
+        margin: 0.42,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'MORE', confidence: 0.96 },
+          { sign: 'ALL DONE', confidence: 0.40 },
+        ],
+        gesture_type: 'two_hands_more_tapping',
+        language: 'asl',
+      };
+    }
+
+    // 4. OPEN: Both hands flat open side by side
+    if (
+      ['STOP', 'HELLO', 'PLEASE', 'OPEN', 'ALL DONE'].includes(res1.sign || '') &&
+      ['STOP', 'HELLO', 'PLEASE', 'OPEN', 'ALL DONE'].includes(res2.sign || '')
+    ) {
+      const dy = Math.abs(w1.y - w2.y);
+      if (dy < 0.25 && distWrists > 0.15) {
+        return {
+          status: 'recognized',
+          sign: 'OPEN',
+          confidence: 0.95,
+          margin: 0.40,
+          is_candidate: true,
+          message: null,
+          top_candidates: [
+            { sign: 'OPEN', confidence: 0.95 },
+            { sign: 'ALL DONE', confidence: 0.45 },
+          ],
+          gesture_type: 'two_hands_open_doors',
+          language: 'asl',
+        };
+      }
+    }
+
+    // 5. STOP: One hand vertical flat chopping on horizontal flat palm of other
+    if ((res1.sign === 'STOP' && isOpen2) || (res2.sign === 'STOP' && isOpen1)) {
+      return {
+        status: 'recognized',
+        sign: 'STOP',
+        confidence: 0.96,
+        margin: 0.42,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'STOP', confidence: 0.96 },
+          { sign: 'HELLO', confidence: 0.40 },
+        ],
+        gesture_type: 'two_hands_stop_barrier',
+        language: 'asl',
+      };
+    }
+
+    // 6. SIT: One hand hooked fingers (SIT), other hand flat palm/fingers
+    if ((res1.sign === 'SIT' && isOpen2) || (res2.sign === 'SIT' && isOpen1)) {
+      return {
+        status: 'recognized',
+        sign: 'SIT',
+        confidence: 0.95,
+        margin: 0.40,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'SIT', confidence: 0.95 },
+          { sign: 'GO', confidence: 0.40 },
+        ],
+        gesture_type: 'two_hands_sit_bench',
+        language: 'asl',
+      };
+    }
+
+    // 7. PLAY: Both hands showing "Y" handshape
+    if (res1.sign === 'PLAY' && res2.sign === 'PLAY') {
+      return {
+        status: 'recognized',
+        sign: 'PLAY',
+        confidence: 0.96,
+        margin: 0.42,
+        is_candidate: true,
+        message: null,
+        top_candidates: [
+          { sign: 'PLAY', confidence: 0.96 },
+          { sign: 'YES', confidence: 0.40 },
+        ],
+        gesture_type: 'two_hands_play',
+        language: 'asl',
+      };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -585,6 +926,34 @@ export function runClientInference(payload: FramePayload): PredictionEvent {
       hands_count: 0,
       language: 'heuristic',
     };
+  }
+
+  // 1. If 2 or more hands are present, check two-hand coordinated gestures first
+  if (payload.hands && payload.hands.length >= 2) {
+    const twoHandResult = classifyTwoHandFeatures(
+      payload.hands,
+      payload.image_width,
+      payload.image_height
+    );
+    if (twoHandResult && twoHandResult.status === 'recognized') {
+      return {
+        schema_version: '1.0',
+        session_id: payload.session_id,
+        frame_id: payload.frame_id,
+        timestamp,
+        status: twoHandResult.status,
+        sign: twoHandResult.sign,
+        confidence: twoHandResult.confidence,
+        margin: twoHandResult.margin,
+        is_candidate: twoHandResult.is_candidate,
+        message: twoHandResult.message,
+        rejection_reason: twoHandResult.rejection_reason,
+        top_candidates: twoHandResult.top_candidates,
+        hands_count: handsCount,
+        handedness: 'Both',
+        language: twoHandResult.language || 'asl',
+      };
+    }
   }
 
   const { hand: primaryHand } = selectClientPrimaryHand(payload.hands);
